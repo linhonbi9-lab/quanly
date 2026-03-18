@@ -65,7 +65,6 @@ max-height:100%;
 
 <input id="metdu" type="number" placeholder="Số mét dư">
 
-<!-- 🔥 ẨN NGÀY -->
 <input id="ngayxuat" type="hidden">
 
 <input type="file" accept="image/*" onchange="loadImage(event)">
@@ -87,6 +86,7 @@ max-height:100%;
 <th>Mét dư</th>
 <th>Ngày xuất</th>
 <th>Ảnh</th>
+<th>Xuất</th>
 <th>Xoá</th>
 </tr>
 </thead>
@@ -110,7 +110,7 @@ function saveData() {
     localStorage.setItem("metdu", JSON.stringify(data));
 }
 
-// 🔥 HIỂN THỊ CHỈ NGÀY
+// FORMAT DATE
 function formatDate(dt) {
     if (!dt) return "";
     return new Date(dt).toLocaleDateString('vi-VN');
@@ -135,12 +135,13 @@ function render() {
         if (!matchSearch || !matchPX) return;
 
         table.innerHTML += `
-        <tr>
+        <tr style="${item.done ? 'background:red; color:white;' : ''}">
             <td onclick="viewImageByIndex(${index})">${item.barcode}</td>
             <td>${item.mavattu}</td>
             <td>${item.phanxuong}</td>
             <td>${item.metdu}</td>
             <td>${formatDate(item.ngayxuat)}</td>
+
             <td>
                 ${
                     item.image
@@ -150,6 +151,13 @@ function render() {
                 <br>
                 <button onclick="deleteImage(${index})">🗑️</button>
             </td>
+
+            <td>
+                <button onclick="toggleDone(${index})">
+                    ${item.done ? '✅ Đã xuất' : '📦 Xuất'}
+                </button>
+            </td>
+
             <td><button class="delete" onclick="removeData(${index})">X</button></td>
         </tr>`;
     });
@@ -169,7 +177,7 @@ function updateGoiY() {
     });
 }
 
-// 🔥 LẤY GIỜ THỰC
+// LẤY GIỜ THỰC
 function setNow() {
     const now = new Date();
 
@@ -183,7 +191,7 @@ function setNow() {
         `${yyyy}-${mm}-${dd}T${hh}:${min}`;
 }
 
-// ADD (🔥 ĐÃ FIX)
+// ADD
 function addData() {
     const barcode = document.getElementById("barcode");
     const mavattu = document.getElementById("mavattu");
@@ -193,7 +201,6 @@ function addData() {
     if (!barcode.value && !mavattu.value) return alert("Nhập Barcode hoặc Mã vật tư!");
     if (px === "all") return alert("Chọn phân xưởng!");
 
-    // 🔥 FIX CHÍNH Ở ĐÂY
     setNow();
     const ngayxuat = document.getElementById("ngayxuat").value;
 
@@ -203,7 +210,8 @@ function addData() {
         metdu: metdu.value,
         phanxuong: px,
         ngayxuat: ngayxuat,
-        image: currentImage || null
+        image: currentImage || null,
+        done: false
     });
 
     saveData();
@@ -217,7 +225,14 @@ function addData() {
     currentImage = "";
 }
 
-// DELETE
+// TOGGLE XUẤT
+function toggleDone(index) {
+    data[index].done = !data[index].done;
+    saveData();
+    render();
+}
+
+// DELETE ROW
 function removeData(index) {
     if (confirm("Bạn có chắc muốn xoá dòng này không?")) {
         data.splice(index, 1);
