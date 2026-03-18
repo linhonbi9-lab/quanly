@@ -18,7 +18,6 @@ input, select, button {
 table { width: 100%; border-collapse: collapse; margin-top: 10px; }
 th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
 button.delete { background: red; color: white; }
-
 img { border-radius: 5px; cursor: pointer; }
 
 #imageModal {
@@ -30,13 +29,11 @@ background:rgba(0,0,0,0.95);
 justify-content:center;
 align-items:center;
 z-index:9999;
-touch-action:none;
 }
 
 #fullImage {
 max-width:100%;
 max-height:100%;
-transition: transform 0.3s;
 }
 
 #reader { width: 100%; margin-top: 10px; }
@@ -55,6 +52,10 @@ transition: transform 0.3s;
 </select>
 
 <button onclick="startScan()">📷 Quét QR</button>
+<button onclick="stopScan()">❌ Tắt quét</button>
+
+<div id="scanStatus" style="text-align:center; font-weight:bold;"></div>
+
 <div id="reader"></div>
 
 <input id="barcode" placeholder="Mã Barcode">
@@ -94,6 +95,7 @@ transition: transform 0.3s;
 
 <script>
 let data = JSON.parse(localStorage.getItem("metdu")) || [];
+let html5Qr;
 let currentImage = "";
 let currentEditIndex = null;
 
@@ -131,8 +133,8 @@ function render() {
             </td>
             <td>
                 ${
-                    item.image 
-                    ? `<img src="${item.image}" width="50" onclick="changeImage(${index})">`
+                    item.image && item.image !== "null"
+                    ? `<img src="${item.image}" width="50" onclick="event.stopPropagation(); changeImage(${index})">`
                     : `<button onclick="changeImage(${index})">📷 Thêm ảnh</button>`
                 }
                 <br>
@@ -145,10 +147,10 @@ function render() {
 
 // ADD
 function addData() {
-    const barcode = barcodeEl("barcode");
-    const mavattu = barcodeEl("mavattu");
-    const metdu = barcodeEl("metdu").value;
-    const px = barcodeEl("filterPX").value;
+    const barcode = document.getElementById("barcode");
+    const mavattu = document.getElementById("mavattu");
+    const metdu = document.getElementById("metdu");
+    const px = document.getElementById("filterPX").value;
 
     if (!barcode.value && !mavattu.value) return alert("Nhập Barcode hoặc Mã vật tư!");
     if (px === "all") return alert("Chọn phân xưởng!");
@@ -156,9 +158,9 @@ function addData() {
     data.push({
         barcode: barcode.value,
         mavattu: mavattu.value,
-        metdu,
+        metdu: metdu.value,
         phanxuong: px,
-        image: currentImage
+        image: currentImage || null
     });
 
     saveData();
@@ -166,13 +168,10 @@ function addData() {
 
     barcode.value = "";
     mavattu.value = "";
-    barcodeEl("metdu").value = "";
+    metdu.value = "";
     preview.src = "";
     currentImage = "";
 }
-
-// helper
-function barcodeEl(id){ return document.getElementById(id); }
 
 // UPDATE
 function updateMet(index, value) {
@@ -180,13 +179,26 @@ function updateMet(index, value) {
     saveData();
 }
 
-// DELETE
+// DELETE ROW
 function removeData(index) {
-    if (confirm("Xoá?")) {
+    if (confirm("Bạn có chắc muốn xoá dòng này không?")) {
         data.splice(index, 1);
         saveData();
         render();
     }
+}
+
+// DELETE IMAGE (FIX CHUẨN)
+function deleteImage(index) {
+    if (!confirm("Bạn có chắc muốn xoá ảnh không?")) return;
+
+    data[index].image = null;
+
+    saveData();
+
+    setTimeout(() => {
+        render();
+    }, 50);
 }
 
 // LOAD IMAGE
@@ -223,48 +235,55 @@ hiddenFile.addEventListener("change", function(e) {
     reader.readAsDataURL(file);
 });
 
-// DELETE IMAGE
-function deleteImage(index) {
-    data[index].image = "";
-    saveData();
-    render();
-}
-
-// VIEW IMAGE (IPHONE FIX)
+// VIEW IMAGE
 function viewImageByIndex(index) {
     const img = data[index].image;
-    if (!img) return;
+    if (!img) return alert("Không có ảnh");
 
-    imageModal.style.display = "flex";
-    fullImage.src = img;
-    fullImage.style.transform = "scale(1)";
+    const modal = document.getElementById("imageModal");
+    const full = document.getElementById("fullImage");
+
+    modal.style.display = "flex";
+
+    setTimeout(() => {
+        full.src = img;
+    }, 50);
 }
 
-// CLOSE + SWIPE DOWN
-let startY = 0;
-
-imageModal.addEventListener("touchstart", e => {
-    startY = e.touches[0].clientY;
-});
-
-imageModal.addEventListener("touchmove", e => {
-    let moveY = e.touches[0].clientY;
-    if (moveY - startY > 100) {
-        imageModal.style.display = "none";
+// CLOSE MODAL
+document.getElementById("imageModal").addEventListener("click", function(e) {
+    if (e.target.id === "imageModal") {
+        this.style.display = "none";
     }
 });
 
-// DOUBLE TAP ZOOM
-let zoom = 1;
-fullImage.addEventListener("dblclick", () => {
-    zoom = zoom === 1 ? 2 : 1;
-    fullImage.style.transform = `scale(${zoom})`;
-});
+// QR
+function startScan() {
+    if (!html5Qr) html5Qr = new Html5Qrcode("reader");
 
-// CLICK TO CLOSE
-imageModal.addEventListener("click", () => {
-    imageModal.style.display = "none";
-});
+    document.getElementById("scanStatus").innerText = "📷 Đang mở camera quét QR...";
+
+    html5Qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (text) => {
+            document.getElementById("barcode").value = text;
+            document.getElementById("scanStatus").innerText = "✅ Đã quét xong";
+            stopScan();
+        }
+    ).catch(() => {
+        document.getElementById("scanStatus").innerText = "❌ Không mở được camera";
+    });
+}
+
+function stopScan() {
+    if (html5Qr) {
+        html5Qr.stop().then(() => {
+            document.getElementById("reader").innerHTML = "";
+            document.getElementById("scanStatus").innerText = "⛔ Đã tắt quét QR";
+        });
+    }
+}
 
 render();
 </script>
