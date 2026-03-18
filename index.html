@@ -63,7 +63,6 @@ max-height:100%;
 <input id="metdu" type="number" placeholder="Số mét dư">
 
 <input type="file" accept="image/*" onchange="loadImage(event)">
-
 <img id="preview" width="100%">
 <button onclick="removeImage()">🗑️ Xoá ảnh</button>
 
@@ -188,17 +187,13 @@ function removeData(index) {
     }
 }
 
-// DELETE IMAGE (FIX CHUẨN)
+// DELETE IMAGE
 function deleteImage(index) {
     if (!confirm("Bạn có chắc muốn xoá ảnh không?")) return;
 
     data[index].image = null;
-
     saveData();
-
-    setTimeout(() => {
-        render();
-    }, 50);
+    render();
 }
 
 // LOAD IMAGE
@@ -257,31 +252,50 @@ document.getElementById("imageModal").addEventListener("click", function(e) {
     }
 });
 
-// QR
+// 🔥 QR FIX iPHONE
 function startScan() {
     if (!html5Qr) html5Qr = new Html5Qrcode("reader");
 
-    document.getElementById("scanStatus").innerText = "📷 Đang mở camera quét QR...";
+    document.getElementById("scanStatus").innerText = "📷 Đang mở camera...";
 
-    html5Qr.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        (text) => {
-            document.getElementById("barcode").value = text;
-            document.getElementById("scanStatus").innerText = "✅ Đã quét xong";
-            stopScan();
+    Html5Qrcode.getCameras().then(devices => {
+
+        if (devices && devices.length) {
+
+            const cameraId = devices.length > 1 ? devices[1].id : devices[0].id;
+
+            html5Qr.start(
+                cameraId,
+                { fps: 10, qrbox: 250 },
+                (text) => {
+                    document.getElementById("barcode").value = text;
+                    document.getElementById("scanStatus").innerText = "✅ Quét xong";
+                    stopScan();
+                }
+            );
+
+        } else {
+            document.getElementById("scanStatus").innerText = "❌ Không tìm thấy camera";
         }
-    ).catch(() => {
-        document.getElementById("scanStatus").innerText = "❌ Không mở được camera";
+
+    }).catch(err => {
+        document.getElementById("scanStatus").innerText = "❌ Lỗi camera: " + err;
     });
 }
 
 function stopScan() {
-    if (html5Qr) {
+    if (html5Qr && html5Qr.isScanning) {
         html5Qr.stop().then(() => {
             document.getElementById("reader").innerHTML = "";
             document.getElementById("scanStatus").innerText = "⛔ Đã tắt quét QR";
-        });
+        }).catch(() => {});
+    }
+}
+
+// ⚠️ CẢNH BÁO iPHONE
+window.onload = function() {
+    if (location.protocol !== "https:" && location.hostname !== "localhost") {
+        alert("⚠️ iPhone cần mở bằng HTTPS mới dùng được camera");
     }
 }
 
