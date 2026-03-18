@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản lý mét dư vật tư</title>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<link href="https://unpkg.com/cropperjs/dist/cropper.min.css" rel="stylesheet"/>
+<script src="https://unpkg.com/cropperjs"></script>
+
+<style>
+body { font-family: Arial; padding: 10px; }
+input, select, button {
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    font-size: 16px;
+}
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+button.delete { background: red; color: white; }
+img { border-radius: 5px; cursor: pointer; }
+#reader { width: 100%; margin-top: 10px; }
+</style>
+</head>
+
+<body>
+
+<h3>📦 Quản lý mét dư vật tư</h3>
+
+<select id="filterPX" onchange="render()">
+<option value="all">-- Chọn phân xưởng --</option>
+<option value="may1">May 1</option>
+<option value="may2">May 2</option>
+<option value="may3">May 3</option>
+</select>
+
+<button onclick="startScan()">📷 Quét QR</button>
+<div id="reader"></div>
+
+<input id="barcode" placeholder="Mã Barcode">
+<input id="mavattu" placeholder="Mã vật tư">
+<input id="metdu" type="number" placeholder="Số mét dư">
+
+<input type="file" accept="image/*" onchange="loadImage(event)">
+<button onclick="startCamera()">📷 Mở camera</button>
+
+<video id="video" width="100%" autoplay style="display:none;"></video>
+<canvas id="canvas" style="display:none;"></canvas>
+
+<img id="preview" width="100%">
+<button onclick="removeImage()">🗑️ Xoá ảnh (trước khi lưu)</button>
+
+<div id="editor" style="display:none;">
+    <img id="editImage" style="max-width:100%;">
+    <button onclick="cropImage()">✂️ Cắt</button>
+    <button onclick="rotateImage()">🔄 Xoay</button>
+    <button onclick="saveEdit()">💾 Lưu ảnh</button>
+</div>
+
+<button onclick="capture()">📸 Chụp ảnh</button>
+
+<button onclick="addData()">➕ Lưu dữ liệu</button>
+
+<hr>
+
+<input id="search" placeholder="🔍 Tìm kiếm" onkeyup="render()">
+
+<table>
+<thead>
+<tr>
+<th>Barcode</th>
+<th>Mã vật tư</th>
+<th>PX</th>
+<th>Mét dư</th>
+<th>Ảnh</th>
+<th>Xoá</th>
+</tr>
+</thead>
+<tbody id="dataTable"></tbody>
+</table>
+
+<!-- XEM ẢNH -->
+<div id="imageModal" style="
+display:none;
+position:fixed;
+top:0; left:0;
+width:100%; height:100%;
+background:rgba(0,0,0,0.9);
+justify-content:center;
+align-items:center;
+z-index:9999;
+">
+<img id="fullImage" style="max-width:95%; max-height:95%;">
+<button onclick="closeImage()" style="
+position:absolute;
+top:20px;
+right:20px;
+padding:10px;
+background:red;
+color:white;
+border:none;
+">X</button>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem("metdu")) || [];
+let html5Qr;
+let currentImage = "";
+let stream = null;
+let cropper;
+let editingIndex = null;
+
+// SAVE
+function saveData() {
+    localStorage.setItem("metdu", JSON.stringify(data));
+}
+
+// RENDER
+function render() {
+    const table = document.getElementById("dataTable");
+    const px = document.getElementById("filterPX").value;
+    const key = document.getElementById("search").value.toLowerCase();
+
+    table.innerHTML = "";
+
+    data.filter(item => {
+        if (key) {
+            return (item.barcode || "").toLowerCase().includes(key) ||
+                   (item.mavattu || "").toLowerCase().includes(key);
+        }
+        return px === "all" || item.phanxuong === px;
+    }).forEach((item, index) => {
+
+        table.innerHTML += `
+        <tr>
+            <td>${item.barcode}</td>
+            <td>${item.mavattu}</td>
+            <td>${item.phanxuong}</td>
+
+            <td>
+                <input type="number" value="${item.metdu}" 
+                onchange="updateMet(${index}, this.value)">
+            </td>
+
+            <td>
+                ${
+                    Array.isArray(item.image)
+                    ? item.image.map(img => 
+                        `<img src="${img}" width="50" style="margin:2px" onclick="viewImage('${img}')">`
+                      ).join("")
+                    : item.image
+                    ? `<img src="${item.image}" width="50" onclick="viewImage('${item.image}')">`
+                    : ""
+                }
+                <br>
+                <button onclick="editImage(${index})">🖼️ Sửa</button>
+                <button onclick="deleteImage(${index})">🗑️ Xoá</button>
+            </td>
+
+            <td><button class="delete" onclick="removeData(${index})">X</button></td>
+        </tr>`;
+    });
+}
+
+// ADD
+function addData() {
+    const barcode = document.getElementById("barcode").value.trim();
+    const mavattu = document.getElementById("mavattu").value.trim();
+    const metdu = document.getElementById("metdu").value;
+    const px = document.getElementById("filterPX").value;
+
+    if (!barcode && !mavattu) return alert("Nhập Barcode hoặc Mã vật tư!");
+    if (px === "all") return alert("Chọn phân xưởng!");
+
+    data.push({ barcode, mavattu, metdu, phanxuong: px, image: currentImage });
+
+    saveData();
+    render();
+
+    barcode.value = "";
+    mavattu.value = "";
+    metdu.value = "";
+    preview.src = "";
+    currentImage = "";
+}
+
+// UPDATE
+function updateMet(index, value) {
+    data[index].metdu = value;
+    saveData();
+}
+
+// DELETE ROW
+function removeData(index) {
+    if (confirm("Xoá dữ liệu này?")) {
+        data.splice(index, 1);
+        saveData();
+        render();
+    }
+}
+
+// XOÁ ẢNH TRƯỚC KHI LƯU
+function removeImage() {
+    currentImage = "";
+    preview.src = "";
+}
+
+// SỬA ẢNH
+function editImage(index) {
+    editingIndex = index;
+    alert("Chọn hoặc chụp ảnh mới");
+}
+
+function deleteImage(index) {
+    if (confirm("Xoá ảnh này?")) {
+        data[index].image = "";
+        saveData();
+        render();
+    }
+}
+
+// QR
+function startScan() {
+    if (!html5Qr) html5Qr = new Html5Qrcode("reader");
+
+    html5Qr.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (text) => {
+            barcode.value = text;
+            html5Qr.stop();
+            reader.innerHTML = "";
+        }
+    );
+}
+
+// LOAD IMAGE
+function loadImage(e) {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+
+    reader.onload = function(ev) {
+        openEditor(ev.target.result);
+    };
+
+    reader.readAsDataURL(file);
+}
+
+// CAMERA
+function startCamera() {
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+    .then(s => {
+        stream = s;
+        video.srcObject = s;
+        video.style.display = "block";
+    });
+}
+
+function capture() {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const imgData = canvas.toDataURL("image/png");
+
+    openEditor(imgData);
+
+    stream.getTracks().forEach(t => t.stop());
+    video.style.display = "none";
+}
+
+// EDIT
+function openEditor(src) {
+    editor.style.display = "block";
+    editImage.src = src;
+
+    if (cropper) cropper.destroy();
+    cropper = new Cropper(editImage, { viewMode: 1 });
+}
+
+function cropImage() {
+    const canvas = cropper.getCroppedCanvas();
+    editImage.src = canvas.toDataURL();
+}
+
+function rotateImage() {
+    cropper.rotate(90);
+}
+
+// 🔥 SAVE EDIT (GIỮ ẢNH CŨ HOẶC THÊM MỚI)
+function saveEdit() {
+    const canvas = cropper.getCroppedCanvas();
+    const img = canvas.toDataURL("image/png");
+
+    if (editingIndex !== null) {
+
+        if (data[editingIndex].image) {
+
+            const confirmReplace = confirm(
+                "OK = Thay ảnh cũ\nCancel = Giữ cả 2 ảnh"
+            );
+
+            if (confirmReplace) {
+                data[editingIndex].image = img;
+            } else {
+                if (!Array.isArray(data[editingIndex].image)) {
+                    data[editingIndex].image = [data[editingIndex].image];
+                }
+                data[editingIndex].image.push(img);
+            }
+
+        } else {
+            data[editingIndex].image = img;
+        }
+
+        editingIndex = null;
+        saveData();
+        render();
+
+    } else {
+        currentImage = img;
+        preview.src = currentImage;
+    }
+
+    editor.style.display = "none";
+}
+
+// VIEW
+function viewImage(src) {
+    imageModal.style.display = "flex";
+    fullImage.src = src;
+}
+
+function closeImage() {
+    imageModal.style.display = "none";
+}
+
+render();
+</script>
+
+</body>
+</html>
