@@ -6,7 +6,6 @@
 <title>Quản lý mét dư vật tư</title>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
-
 <link href="https://unpkg.com/cropperjs/dist/cropper.min.css" rel="stylesheet"/>
 <script src="https://unpkg.com/cropperjs"></script>
 
@@ -22,7 +21,6 @@ table { width: 100%; border-collapse: collapse; margin-top: 10px; }
 th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
 button.delete { background: red; color: white; }
 img { border-radius: 5px; cursor: pointer; }
-#reader { width: 100%; margin-top: 10px; }
 </style>
 </head>
 
@@ -38,6 +36,7 @@ img { border-radius: 5px; cursor: pointer; }
 </select>
 
 <button onclick="startScan()">📷 Quét QR</button>
+<button onclick="stopScan()">🛑 Tắt camera</button>
 <div id="reader"></div>
 
 <input id="barcode" placeholder="Mã Barcode">
@@ -45,13 +44,7 @@ img { border-radius: 5px; cursor: pointer; }
 <input id="metdu" type="number" placeholder="Số mét dư">
 
 <input type="file" accept="image/*" onchange="loadImage(event)">
-<button onclick="startCamera()">📷 Mở camera</button>
-
-<video id="video" width="100%" autoplay style="display:none;"></video>
-<canvas id="canvas" style="display:none;"></canvas>
-
 <img id="preview" width="100%">
-<button onclick="removeImage()">🗑️ Xoá ảnh (trước khi lưu)</button>
 
 <div id="editor" style="display:none;">
     <img id="editImage" style="max-width:100%;">
@@ -59,8 +52,6 @@ img { border-radius: 5px; cursor: pointer; }
     <button onclick="rotateImage()">🔄 Xoay</button>
     <button onclick="saveEdit()">💾 Lưu ảnh</button>
 </div>
-
-<button onclick="capture()">📸 Chụp ảnh</button>
 
 <button onclick="addData()">➕ Lưu dữ liệu</button>
 
@@ -82,7 +73,7 @@ img { border-radius: 5px; cursor: pointer; }
 <tbody id="dataTable"></tbody>
 </table>
 
-<!-- XEM ẢNH -->
+<!-- Xem ảnh -->
 <div id="imageModal" style="
 display:none;
 position:fixed;
@@ -109,16 +100,13 @@ border:none;
 let data = JSON.parse(localStorage.getItem("metdu")) || [];
 let html5Qr;
 let currentImage = "";
-let stream = null;
 let cropper;
 let editingIndex = null;
 
-// SAVE
 function saveData() {
     localStorage.setItem("metdu", JSON.stringify(data));
 }
 
-// RENDER
 function render() {
     const table = document.getElementById("dataTable");
     const px = document.getElementById("filterPX").value;
@@ -157,7 +145,6 @@ function render() {
                 }
                 <br>
                 <button onclick="editImage(${index})">🖼️ Sửa</button>
-                <button onclick="deleteImage(${index})">🗑️ Xoá</button>
             </td>
 
             <td><button class="delete" onclick="removeData(${index})">X</button></td>
@@ -165,7 +152,6 @@ function render() {
     });
 }
 
-// ADD
 function addData() {
     const barcode = document.getElementById("barcode").value.trim();
     const mavattu = document.getElementById("mavattu").value.trim();
@@ -180,20 +166,18 @@ function addData() {
     saveData();
     render();
 
-    barcode.value = "";
-    mavattu.value = "";
-    metdu.value = "";
-    preview.src = "";
+    document.getElementById("barcode").value = "";
+    document.getElementById("mavattu").value = "";
+    document.getElementById("metdu").value = "";
+    document.getElementById("preview").src = "";
     currentImage = "";
 }
 
-// UPDATE
 function updateMet(index, value) {
     data[index].metdu = value;
     saveData();
 }
 
-// DELETE ROW
 function removeData(index) {
     if (confirm("Xoá dữ liệu này?")) {
         data.splice(index, 1);
@@ -202,27 +186,11 @@ function removeData(index) {
     }
 }
 
-// XOÁ ẢNH TRƯỚC KHI LƯU
-function removeImage() {
-    currentImage = "";
-    preview.src = "";
-}
-
-// SỬA ẢNH
 function editImage(index) {
     editingIndex = index;
-    alert("Chọn hoặc chụp ảnh mới");
+    alert("Chọn ảnh mới để sửa");
 }
 
-function deleteImage(index) {
-    if (confirm("Xoá ảnh này?")) {
-        data[index].image = "";
-        saveData();
-        render();
-    }
-}
-
-// QR
 function startScan() {
     if (!html5Qr) html5Qr = new Html5Qrcode("reader");
 
@@ -230,14 +198,20 @@ function startScan() {
         { facingMode: "environment" },
         { fps: 10, qrbox: 250 },
         (text) => {
-            barcode.value = text;
-            html5Qr.stop();
-            reader.innerHTML = "";
+            document.getElementById("barcode").value = text;
+            stopScan();
         }
     );
 }
 
-// LOAD IMAGE
+function stopScan() {
+    if (html5Qr) {
+        html5Qr.stop().then(() => {
+            document.getElementById("reader").innerHTML = "";
+        }).catch(err => console.log(err));
+    }
+}
+
 function loadImage(e) {
     const file = e.target.files[0];
     const reader = new FileReader();
@@ -249,48 +223,23 @@ function loadImage(e) {
     reader.readAsDataURL(file);
 }
 
-// CAMERA
-function startCamera() {
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(s => {
-        stream = s;
-        video.srcObject = s;
-        video.style.display = "block";
-    });
-}
-
-function capture() {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    canvas.getContext("2d").drawImage(video, 0, 0);
-    const imgData = canvas.toDataURL("image/png");
-
-    openEditor(imgData);
-
-    stream.getTracks().forEach(t => t.stop());
-    video.style.display = "none";
-}
-
-// EDIT
 function openEditor(src) {
-    editor.style.display = "block";
-    editImage.src = src;
+    document.getElementById("editor").style.display = "block";
+    document.getElementById("editImage").src = src;
 
     if (cropper) cropper.destroy();
-    cropper = new Cropper(editImage, { viewMode: 1 });
+    cropper = new Cropper(document.getElementById("editImage"), { viewMode: 1 });
 }
 
 function cropImage() {
     const canvas = cropper.getCroppedCanvas();
-    editImage.src = canvas.toDataURL();
+    document.getElementById("editImage").src = canvas.toDataURL();
 }
 
 function rotateImage() {
     cropper.rotate(90);
 }
 
-// 🔥 SAVE EDIT (GIỮ ẢNH CŨ HOẶC THÊM MỚI)
 function saveEdit() {
     const canvas = cropper.getCroppedCanvas();
     const img = canvas.toDataURL("image/png");
@@ -298,20 +247,10 @@ function saveEdit() {
     if (editingIndex !== null) {
 
         if (data[editingIndex].image) {
-
-            const confirmReplace = confirm(
-                "OK = Thay ảnh cũ\nCancel = Giữ cả 2 ảnh"
-            );
-
-            if (confirmReplace) {
-                data[editingIndex].image = img;
-            } else {
-                if (!Array.isArray(data[editingIndex].image)) {
-                    data[editingIndex].image = [data[editingIndex].image];
-                }
-                data[editingIndex].image.push(img);
+            if (!Array.isArray(data[editingIndex].image)) {
+                data[editingIndex].image = [data[editingIndex].image];
             }
-
+            data[editingIndex].image.push(img);
         } else {
             data[editingIndex].image = img;
         }
@@ -322,20 +261,19 @@ function saveEdit() {
 
     } else {
         currentImage = img;
-        preview.src = currentImage;
+        document.getElementById("preview").src = currentImage;
     }
 
-    editor.style.display = "none";
+    document.getElementById("editor").style.display = "none";
 }
 
-// VIEW
 function viewImage(src) {
-    imageModal.style.display = "flex";
-    fullImage.src = src;
+    document.getElementById("imageModal").style.display = "flex";
+    document.getElementById("fullImage").src = src;
 }
 
 function closeImage() {
-    imageModal.style.display = "none";
+    document.getElementById("imageModal").style.display = "none";
 }
 
 render();
