@@ -59,8 +59,14 @@ max-height:100%;
 <div id="reader"></div>
 
 <input id="barcode" placeholder="Mã Barcode">
-<input id="mavattu" placeholder="Mã vật tư">
+
+<input id="mavattu" list="goiYMavattu" placeholder="Mã vật tư">
+<datalist id="goiYMavattu"></datalist>
+
 <input id="metdu" type="number" placeholder="Số mét dư">
+
+<!-- 🔥 ẨN NGÀY -->
+<input id="ngayxuat" type="hidden">
 
 <input type="file" accept="image/*" onchange="loadImage(event)">
 <img id="preview" width="100%">
@@ -79,6 +85,7 @@ max-height:100%;
 <th>Mã vật tư</th>
 <th>PX</th>
 <th>Mét dư</th>
+<th>Ngày xuất</th>
 <th>Ảnh</th>
 <th>Xoá</th>
 </tr>
@@ -101,6 +108,12 @@ let currentEditIndex = null;
 // SAVE
 function saveData() {
     localStorage.setItem("metdu", JSON.stringify(data));
+}
+
+// 🔥 HIỂN THỊ CHỈ NGÀY
+function formatDate(dt) {
+    if (!dt) return "";
+    return new Date(dt).toLocaleDateString('vi-VN');
 }
 
 // RENDER
@@ -126,13 +139,11 @@ function render() {
             <td onclick="viewImageByIndex(${index})">${item.barcode}</td>
             <td>${item.mavattu}</td>
             <td>${item.phanxuong}</td>
-            <td>
-                <input type="number" value="${item.metdu}" 
-                onchange="updateMet(${index}, this.value)">
-            </td>
+            <td>${item.metdu}</td>
+            <td>${formatDate(item.ngayxuat)}</td>
             <td>
                 ${
-                    item.image && item.image !== "null"
+                    item.image
                     ? `<img src="${item.image}" width="50" onclick="event.stopPropagation(); changeImage(${index})">`
                     : `<button onclick="changeImage(${index})">📷 Thêm ảnh</button>`
                 }
@@ -144,7 +155,35 @@ function render() {
     });
 }
 
-// ADD
+// GỢI Ý
+function updateGoiY() {
+    const list = document.getElementById("goiYMavattu");
+    const unique = [...new Set(data.map(i => i.mavattu).filter(Boolean))];
+
+    list.innerHTML = "";
+
+    unique.forEach(ma => {
+        const option = document.createElement("option");
+        option.value = ma;
+        list.appendChild(option);
+    });
+}
+
+// 🔥 LẤY GIỜ THỰC
+function setNow() {
+    const now = new Date();
+
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+
+    document.getElementById("ngayxuat").value =
+        `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+}
+
+// ADD (🔥 ĐÃ FIX)
 function addData() {
     const barcode = document.getElementById("barcode");
     const mavattu = document.getElementById("mavattu");
@@ -154,16 +193,22 @@ function addData() {
     if (!barcode.value && !mavattu.value) return alert("Nhập Barcode hoặc Mã vật tư!");
     if (px === "all") return alert("Chọn phân xưởng!");
 
+    // 🔥 FIX CHÍNH Ở ĐÂY
+    setNow();
+    const ngayxuat = document.getElementById("ngayxuat").value;
+
     data.push({
         barcode: barcode.value,
         mavattu: mavattu.value,
         metdu: metdu.value,
         phanxuong: px,
+        ngayxuat: ngayxuat,
         image: currentImage || null
     });
 
     saveData();
     render();
+    updateGoiY();
 
     barcode.value = "";
     mavattu.value = "";
@@ -172,25 +217,19 @@ function addData() {
     currentImage = "";
 }
 
-// UPDATE
-function updateMet(index, value) {
-    data[index].metdu = value;
-    saveData();
-}
-
-// DELETE ROW
+// DELETE
 function removeData(index) {
     if (confirm("Bạn có chắc muốn xoá dòng này không?")) {
         data.splice(index, 1);
         saveData();
         render();
+        updateGoiY();
     }
 }
 
 // DELETE IMAGE
 function deleteImage(index) {
     if (!confirm("Bạn có chắc muốn xoá ảnh không?")) return;
-
     data[index].image = null;
     saveData();
     render();
@@ -235,51 +274,29 @@ function viewImageByIndex(index) {
     const img = data[index].image;
     if (!img) return alert("Không có ảnh");
 
-    const modal = document.getElementById("imageModal");
-    const full = document.getElementById("fullImage");
-
-    modal.style.display = "flex";
-
-    setTimeout(() => {
-        full.src = img;
-    }, 50);
+    document.getElementById("imageModal").style.display = "flex";
+    document.getElementById("fullImage").src = img;
 }
 
-// CLOSE MODAL
-document.getElementById("imageModal").addEventListener("click", function(e) {
-    if (e.target.id === "imageModal") {
-        this.style.display = "none";
-    }
-});
+document.getElementById("imageModal").onclick = function(e) {
+    if (e.target.id === "imageModal") this.style.display = "none";
+};
 
-// 🔥 QR FIX iPHONE
+// QR
 function startScan() {
     if (!html5Qr) html5Qr = new Html5Qrcode("reader");
 
-    document.getElementById("scanStatus").innerText = "📷 Đang mở camera...";
-
     Html5Qrcode.getCameras().then(devices => {
+        const cameraId = devices[devices.length - 1].id;
 
-        if (devices && devices.length) {
-
-            const cameraId = devices.length > 1 ? devices[1].id : devices[0].id;
-
-            html5Qr.start(
-                cameraId,
-                { fps: 10, qrbox: 250 },
-                (text) => {
-                    document.getElementById("barcode").value = text;
-                    document.getElementById("scanStatus").innerText = "✅ Quét xong";
-                    stopScan();
-                }
-            );
-
-        } else {
-            document.getElementById("scanStatus").innerText = "❌ Không tìm thấy camera";
-        }
-
-    }).catch(err => {
-        document.getElementById("scanStatus").innerText = "❌ Lỗi camera: " + err;
+        html5Qr.start(
+            cameraId,
+            { fps: 10, qrbox: 250 },
+            (text) => {
+                document.getElementById("barcode").value = text;
+                stopScan();
+            }
+        );
     });
 }
 
@@ -287,19 +304,16 @@ function stopScan() {
     if (html5Qr && html5Qr.isScanning) {
         html5Qr.stop().then(() => {
             document.getElementById("reader").innerHTML = "";
-            document.getElementById("scanStatus").innerText = "⛔ Đã tắt quét QR";
-        }).catch(() => {});
+        });
     }
 }
 
-// ⚠️ CẢNH BÁO iPHONE
+// LOAD
 window.onload = function() {
-    if (location.protocol !== "https:" && location.hostname !== "localhost") {
-        alert("⚠️ iPhone cần mở bằng HTTPS mới dùng được camera");
-    }
+    setNow();
+    updateGoiY();
+    render();
 }
-
-render();
 </script>
 
 </body>
