@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Quản lý mét dư vật tư</title>
+<title>Quản lý mét dư</title>
 
 <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -13,322 +13,135 @@ input, select, button {
     width: 100%;
     padding: 10px;
     margin: 5px 0;
-    font-size: 16px;
 }
-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+table { width: 100%; border-collapse: collapse; }
 th, td { border: 1px solid #ccc; padding: 6px; text-align: center; }
-button.delete { background: red; color: white; }
-img { border-radius: 5px; cursor: pointer; }
-
-#imageModal {
-display:none;
-position:fixed;
-top:0; left:0;
-width:100%; height:100%;
-background:rgba(0,0,0,0.95);
-justify-content:center;
-align-items:center;
-z-index:9999;
-}
-
-#fullImage {
-max-width:100%;
-max-height:100%;
-}
-
-#reader { width: 100%; margin-top: 10px; }
+.done { background: red; color: white; }
 </style>
 </head>
 
 <body>
 
-<h3>📦 Quản lý mét dư vật tư</h3>
+<h3>📦 Quản lý mét dư (Firebase)</h3>
 
-<select id="filterPX" onchange="render()">
-<option value="all">-- Chọn phân xưởng --</option>
+<select id="px">
+<option value="">-- Chọn phân xưởng --</option>
 <option value="may1">May 1</option>
 <option value="may2">May 2</option>
 <option value="may3">May 3</option>
 </select>
 
-<button onclick="startScan()">📷 Quét QR</button>
-<button onclick="stopScan()">❌ Tắt quét</button>
+<input id="barcode" placeholder="Barcode">
+<input id="mavattu" placeholder="Mã vật tư">
+<input id="metdu" type="number" placeholder="Mét dư">
 
-<div id="scanStatus" style="text-align:center; font-weight:bold;"></div>
-
-<div id="reader"></div>
-
-<input id="barcode" placeholder="Mã Barcode">
-
-<input id="mavattu" list="goiYMavattu" placeholder="Mã vật tư">
-<datalist id="goiYMavattu"></datalist>
-
-<input id="metdu" type="number" placeholder="Số mét dư">
-
-<input id="ngayxuat" type="hidden">
-
-<input type="file" accept="image/*" onchange="loadImage(event)">
-<img id="preview" width="100%">
-<button onclick="removeImage()">🗑️ Xoá ảnh</button>
-
-<button onclick="addData()">➕ Lưu dữ liệu</button>
+<button onclick="addData()">➕ Lưu</button>
 
 <hr>
-
-<input id="search" placeholder="🔍 Tìm kiếm" onkeyup="render()">
 
 <table>
 <thead>
 <tr>
 <th>Barcode</th>
-<th>Mã vật tư</th>
+<th>Mã</th>
 <th>PX</th>
-<th>Mét dư</th>
-<th>Ngày xuất</th>
-<th>Ảnh</th>
+<th>Mét</th>
 <th>Xuất</th>
 <th>Xoá</th>
 </tr>
 </thead>
-<tbody id="dataTable"></tbody>
+<tbody id="table"></tbody>
 </table>
 
-<input type="file" id="hiddenFile" accept="image/*" style="display:none;">
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  onSnapshot,
+  deleteDoc,
+  doc,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
-<div id="imageModal">
-<img id="fullImage">
-</div>
-
-<script>
-let data = JSON.parse(localStorage.getItem("metdu")) || [];
-let html5Qr;
-let currentImage = "";
-let currentEditIndex = null;
-
-// SAVE
-function saveData() {
-    localStorage.setItem("metdu", JSON.stringify(data));
-}
-
-// FORMAT DATE
-function formatDate(dt) {
-    if (!dt) return "";
-    return new Date(dt).toLocaleDateString('vi-VN');
-}
-
-// RENDER
-function render() {
-    const table = document.getElementById("dataTable");
-    const px = document.getElementById("filterPX").value;
-    const key = document.getElementById("search").value.toLowerCase();
-
-    table.innerHTML = "";
-
-    data.forEach((item, index) => {
-
-        const matchSearch = !key ||
-            (item.barcode || "").toLowerCase().includes(key) ||
-            (item.mavattu || "").toLowerCase().includes(key);
-
-        const matchPX = px === "all" || item.phanxuong === px;
-
-        if (!matchSearch || !matchPX) return;
-
-        table.innerHTML += `
-        <tr style="${item.done ? 'background:red; color:white;' : ''}">
-            <td onclick="viewImageByIndex(${index})">${item.barcode}</td>
-            <td>${item.mavattu}</td>
-            <td>${item.phanxuong}</td>
-            <td>${item.metdu}</td>
-            <td>${formatDate(item.ngayxuat)}</td>
-
-            <td>
-                ${
-                    item.image
-                    ? `<img src="${item.image}" width="50" onclick="event.stopPropagation(); changeImage(${index})">`
-                    : `<button onclick="changeImage(${index})">📷 Thêm ảnh</button>`
-                }
-                <br>
-                <button onclick="deleteImage(${index})">🗑️</button>
-            </td>
-
-            <td>
-                <button onclick="toggleDone(${index})">
-                    ${item.done ? '✅ Đã xuất' : '📦 Xuất'}
-                </button>
-            </td>
-
-            <td><button class="delete" onclick="removeData(${index})">X</button></td>
-        </tr>`;
-    });
-}
-
-// GỢI Ý
-function updateGoiY() {
-    const list = document.getElementById("goiYMavattu");
-    const unique = [...new Set(data.map(i => i.mavattu).filter(Boolean))];
-
-    list.innerHTML = "";
-
-    unique.forEach(ma => {
-        const option = document.createElement("option");
-        option.value = ma;
-        list.appendChild(option);
-    });
-}
-
-// LẤY GIỜ THỰC
-function setNow() {
-    const now = new Date();
-
-    const yyyy = now.getFullYear();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const hh = String(now.getHours()).padStart(2, '0');
-    const min = String(now.getMinutes()).padStart(2, '0');
-
-    document.getElementById("ngayxuat").value =
-        `${yyyy}-${mm}-${dd}T${hh}:${min}`;
-}
-
-// ADD
-function addData() {
-    const barcode = document.getElementById("barcode");
-    const mavattu = document.getElementById("mavattu");
-    const metdu = document.getElementById("metdu");
-    const px = document.getElementById("filterPX").value;
-
-    if (!barcode.value && !mavattu.value) return alert("Nhập Barcode hoặc Mã vật tư!");
-    if (px === "all") return alert("Chọn phân xưởng!");
-
-    setNow();
-    const ngayxuat = document.getElementById("ngayxuat").value;
-
-    data.push({
-        barcode: barcode.value,
-        mavattu: mavattu.value,
-        metdu: metdu.value,
-        phanxuong: px,
-        ngayxuat: ngayxuat,
-        image: currentImage || null,
-        done: false
-    });
-
-    saveData();
-    render();
-    updateGoiY();
-
-    barcode.value = "";
-    mavattu.value = "";
-    metdu.value = "";
-    preview.src = "";
-    currentImage = "";
-}
-
-// TOGGLE XUẤT
-function toggleDone(index) {
-    data[index].done = !data[index].done;
-    saveData();
-    render();
-}
-
-// DELETE ROW
-function removeData(index) {
-    if (confirm("Bạn có chắc muốn xoá dòng này không?")) {
-        data.splice(index, 1);
-        saveData();
-        render();
-        updateGoiY();
-    }
-}
-
-// DELETE IMAGE
-function deleteImage(index) {
-    if (!confirm("Bạn có chắc muốn xoá ảnh không?")) return;
-    data[index].image = null;
-    saveData();
-    render();
-}
-
-// LOAD IMAGE
-function loadImage(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = ev => {
-        currentImage = ev.target.result;
-        preview.src = currentImage;
-    };
-    reader.readAsDataURL(file);
-
-    e.target.value = "";
-}
-
-// CHANGE IMAGE
-function changeImage(index) {
-    currentEditIndex = index;
-    hiddenFile.click();
-}
-
-hiddenFile.addEventListener("change", function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = ev => {
-        data[currentEditIndex].image = ev.target.result;
-        saveData();
-        render();
-    };
-    reader.readAsDataURL(file);
-});
-
-// VIEW IMAGE
-function viewImageByIndex(index) {
-    const img = data[index].image;
-    if (!img) return alert("Không có ảnh");
-
-    document.getElementById("imageModal").style.display = "flex";
-    document.getElementById("fullImage").src = img;
-}
-
-document.getElementById("imageModal").onclick = function(e) {
-    if (e.target.id === "imageModal") this.style.display = "none";
+const firebaseConfig = {
+  apiKey: "AIzaSyC-yrm3K3rmaRJgJeYEsgGXzpwZYetnR9Q",
+  authDomain: "khodulieu-68b4e.firebaseapp.com",
+  projectId: "khodulieu-68b4e",
+  storageBucket: "khodulieu-68b4e.firebasestorage.app",
+  messagingSenderId: "788765202899",
+  appId: "1:788765202899:web:505f03caa36bcc2d71f726"
 };
 
-// QR
-function startScan() {
-    if (!html5Qr) html5Qr = new Html5Qrcode("reader");
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
-    Html5Qrcode.getCameras().then(devices => {
-        const cameraId = devices[devices.length - 1].id;
+let data = [];
 
-        html5Qr.start(
-            cameraId,
-            { fps: 10, qrbox: 250 },
-            (text) => {
-                document.getElementById("barcode").value = text;
-                stopScan();
-            }
-        );
-    });
+window.addData = async function() {
+  const barcode = document.getElementById("barcode").value;
+  const mavattu = document.getElementById("mavattu").value;
+  const metdu = document.getElementById("metdu").value;
+  const px = document.getElementById("px").value;
+
+  if (!barcode && !mavattu) return alert("Nhập dữ liệu");
+
+  await addDoc(collection(db, "metdu"), {
+    barcode,
+    mavattu,
+    metdu,
+    phanxuong: px,
+    done: false,
+    time: new Date().toISOString()
+  });
+
+  barcode.value = "";
+  mavattu.value = "";
+  metdu.value = "";
+};
+
+function render() {
+  const table = document.getElementById("table");
+  table.innerHTML = "";
+
+  data.forEach((item, index) => {
+    table.innerHTML += `
+    <tr class="${item.done ? 'done' : ''}">
+      <td>${item.barcode || ""}</td>
+      <td>${item.mavattu || ""}</td>
+      <td>${item.phanxuong || ""}</td>
+      <td>${item.metdu || ""}</td>
+      <td>
+        <button onclick="toggle(${index})">
+          ${item.done ? "✅" : "📦"}
+        </button>
+      </td>
+      <td>
+        <button onclick="del(${index})">X</button>
+      </td>
+    </tr>
+    `;
+  });
 }
 
-function stopScan() {
-    if (html5Qr && html5Qr.isScanning) {
-        html5Qr.stop().then(() => {
-            document.getElementById("reader").innerHTML = "";
-        });
-    }
-}
+window.toggle = async function(i) {
+  const item = data[i];
+  await updateDoc(doc(db, "metdu", item.id), {
+    done: !item.done
+  });
+};
 
-// LOAD
-window.onload = function() {
-    setNow();
-    updateGoiY();
-    render();
-}
+window.del = async function(i) {
+  if (!confirm("Xoá?")) return;
+  const item = data[i];
+  await deleteDoc(doc(db, "metdu", item.id));
+};
+
+onSnapshot(collection(db, "metdu"), (snap) => {
+  data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  render();
+});
 </script>
 
 </body>
