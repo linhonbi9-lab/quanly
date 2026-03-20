@@ -56,6 +56,7 @@
     <option value="may1">May 1</option>
     <option value="may2">May 2</option>
     <option value="may3">May 3</option>
+    <option value="inep">In ép</option>
   </select>
 
   <input id="barcode" placeholder="Barcode">
@@ -66,6 +67,8 @@
   <input id="metdu" type="number" placeholder="Mét dư">
 
   <button onclick="addData()">➕ Lưu</button>
+
+  <input id="search" placeholder="🔍 Tìm theo mã vật tư hoặc barcode">
 
   <hr>
 
@@ -111,16 +114,23 @@
     let data = [];
     let danhSachMa = [];
 
-    window.addData = async function () {
-      const barcodeInput = document.getElementById("barcode");
-      const mavattuInput = document.getElementById("mavattu");
-      const metduInput = document.getElementById("metdu");
-      const pxInput = document.getElementById("px");
+    const pxInput = document.getElementById("px");
+    const barcodeInput = document.getElementById("barcode");
+    const mavattuInput = document.getElementById("mavattu");
+    const metduInput = document.getElementById("metdu");
+    const searchInput = document.getElementById("search");
 
+    window.addData = async function () {
       const barcode = barcodeInput.value.trim();
       const mavattu = mavattuInput.value.trim();
       const metdu = metduInput.value.trim();
       const px = pxInput.value;
+
+      if (!px) {
+        alert("Vui lòng chọn phân xưởng");
+        pxInput.focus();
+        return;
+      }
 
       if (!barcode && !mavattu) {
         alert("Nhập dữ liệu");
@@ -141,7 +151,6 @@
         barcodeInput.value = "";
         mavattuInput.value = "";
         metduInput.value = "";
-        pxInput.value = "";
       } catch (error) {
         console.error("Lỗi khi lưu:", error);
         alert("Lưu dữ liệu thất bại");
@@ -152,6 +161,19 @@
       const list = document.getElementById("listMavattu");
       list.innerHTML = "";
 
+      let dataTheoPX = data;
+      const pxDangChon = pxInput.value;
+
+      if (pxDangChon) {
+        dataTheoPX = data.filter(i => i.phanxuong === pxDangChon);
+      }
+
+      danhSachMa = [...new Set(
+        dataTheoPX
+          .map(i => (i.mavattu || "").trim())
+          .filter(Boolean)
+      )];
+
       danhSachMa.forEach(ma => {
         list.innerHTML += `<option value="${ma}">`;
       });
@@ -161,7 +183,27 @@
       const table = document.getElementById("table");
       table.innerHTML = "";
 
-      data.forEach((item, index) => {
+      const pxDangChon = pxInput.value.trim().toLowerCase();
+      const tuKhoa = searchInput.value.trim().toLowerCase();
+
+      let filteredData = [...data];
+
+      if (pxDangChon) {
+        filteredData = filteredData.filter(item =>
+          (item.phanxuong || "").toLowerCase() === pxDangChon
+        );
+      }
+
+      if (tuKhoa) {
+        filteredData = filteredData.filter(item =>
+          (item.mavattu || "").toLowerCase().includes(tuKhoa) ||
+          (item.barcode || "").toLowerCase().includes(tuKhoa)
+        );
+      }
+
+      filteredData.forEach((item) => {
+        const realIndex = data.findIndex(d => d.id === item.id);
+
         table.innerHTML += `
           <tr class="${item.done ? 'done' : ''}">
             <td>${item.barcode || ""}</td>
@@ -170,12 +212,12 @@
             <td>${item.metdu || ""}</td>
             <td>${item.ngay || ""}</td>
             <td>
-              <button onclick="toggle(${index})">
+              <button onclick="toggle(${realIndex})">
                 ${item.done ? "✅" : "📦"}
               </button>
             </td>
             <td>
-              <button onclick="del(${index})">X</button>
+              <button onclick="del(${realIndex})">X</button>
             </td>
           </tr>
         `;
@@ -195,13 +237,21 @@
       await deleteDoc(doc(db, "metdu", item.id));
     };
 
+    pxInput.addEventListener("change", () => {
+      updateDatalist();
+      render();
+    });
+
+    searchInput.addEventListener("input", () => {
+      render();
+    });
+
     onSnapshot(collection(db, "metdu"), (snap) => {
       data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-      danhSachMa = [...new Set(data.map(i => i.mavattu).filter(Boolean))];
-      updateDatalist();
-
       data.sort((a, b) => new Date(b.time) - new Date(a.time));
+
+      updateDatalist();
       render();
     });
   </script>
