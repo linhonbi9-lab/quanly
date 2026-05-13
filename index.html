@@ -88,7 +88,12 @@
 
   <input id="barcode" placeholder="Barcode">
 
+  <!-- CAMERA -->
   <div id="reader"></div>
+
+  <button id="toggleCamBtn" onclick="toggleCamera()">
+    📷 Tắt camera
+  </button>
 
   <input id="mavattu" list="listMavattu" placeholder="Mã vật tư">
   <datalist id="listMavattu"></datalist>
@@ -449,28 +454,127 @@
     // CAMERA QUÉT BARCODE
     // ====================
 
-    const html5QrCode = new Html5Qrcode("reader");
+    let html5QrCode = new Html5Qrcode("reader");
 
-    Html5Qrcode.getCameras().then(devices => {
+    let cameraRunning = false;
+
+    let currentCameraId = null;
+
+
+
+    async function startCamera() {
+
+      const devices = await Html5Qrcode.getCameras();
 
       if (devices && devices.length) {
 
-        html5QrCode.start(
-          devices[0].id,
+        const backCamera =
+          devices.find(device =>
+            device.label.toLowerCase().includes("back")
+          ) || devices[devices.length - 1];
+
+        currentCameraId = backCamera.id;
+
+        await html5QrCode.start(
+
+          currentCameraId,
+
           {
-            fps: 10,
-            qrbox: 250
+            fps: 15,
+
+            qrbox: {
+              width: 300,
+              height: 150
+            },
+
+            aspectRatio: 1.777,
+
+            disableFlip: true,
+
+            videoConstraints: {
+              facingMode: "environment",
+              width: { ideal: 1920 },
+              height: { ideal: 1080 }
+            }
+
           },
 
           (decodedText) => {
+
             barcodeInput.value = decodedText;
+
+            navigator.vibrate?.(100);
+
           }
 
-        );
+        ).then(() => {
+
+          const track =
+            html5QrCode._localMediaStream
+            ?.getVideoTracks?.()[0];
+
+          if (track) {
+
+            const capabilities = track.getCapabilities();
+
+            if (capabilities.zoom) {
+
+              track.applyConstraints({
+                advanced: [
+                  {
+                    zoom: 2
+                  }
+                ]
+              });
+
+            }
+
+          }
+
+        });
+
+        cameraRunning = true;
+
+        document.getElementById("toggleCamBtn").innerText =
+          "📷 Tắt camera";
 
       }
 
-    });
+    }
+
+
+
+    async function stopCamera() {
+
+      await html5QrCode.stop();
+
+      cameraRunning = false;
+
+      document.getElementById("toggleCamBtn").innerText =
+        "📷 Mở camera";
+
+    }
+
+
+
+    window.toggleCamera = async function () {
+
+      if (cameraRunning) {
+
+        await stopCamera();
+
+      } else {
+
+        await startCamera();
+
+      }
+
+    };
+
+
+
+    // TỰ MỞ CAMERA
+    startCamera();
 
 
 
@@ -513,4 +617,4 @@
   </script>
 
 </body>
-</html>>
+</html>
