@@ -239,7 +239,7 @@
 
     <input type="file" id="importFile" hidden>
 
-    <input id="search" placeholder="🔍 Gõ vào đây để tìm Mã vật tư hoặc Barcode...">
+    <input id="search" placeholder="🔍 Gõ vào đây để lọc nhanh Mã vật tư hoặc Barcode...">
 
     <h3 id="tongmet" style="display:inline-block; margin-right: 10px;">Tổng nhà máy: 0 mét</h3>
     <div style="font-size:11px; color:#e65100; font-weight:bold; margin-top: 2px;">⏰ Đã bật: Mục xuất (✅) tự động xóa hoàn toàn sau 3 ngày</div>
@@ -263,7 +263,7 @@
       </thead>
       <tbody id="table">
         <tr>
-          <td colspan="8" class="info-text">🔍 Nhập từ khóa hoặc quét barcode để tìm kiếm...</td>
+          <td colspan="8" class="info-text">Chọn phân xưởng hoặc tìm kiếm để xem dữ liệu...</td>
         </tr>
       </tbody>
     </table>
@@ -323,7 +323,6 @@
       } catch (e) { console.error(e); }
     }
 
-    // TỰ ĐỘNG TRA CỨU SỐ MÉT CŨ
     window.checkAndFillGocData = function (val, type) {
       if(!val.trim()) return;
       
@@ -339,7 +338,6 @@
       }
     };
 
-    // TỰ ĐỘNG TRỪ SỐ MÉT
     window.tinhToanSoDu = function () {
       const goc = Number(metgocInput.value) || 0;
       const dadung = Number(metdadungInput.value) || 0;
@@ -367,9 +365,6 @@
       return `${parseInt(parts[2])}/${parseInt(parts[1])}/${parts[0]}`;
     }
 
-    // ====================
-    // THÊM DỮ LIỆU
-    // ====================
     window.addData = async function () {
       const barcode = barcodeInput.value.trim();
       const mavattu = mavattuInput.value.trim();
@@ -433,7 +428,7 @@
     }
 
     // ====================================================
-    // HIỂN THỊ VÀ TÍNH TỔNG SỐ DƯ THEO NHÀ MÁY ĐƯỢC CHỌN
+    // HIỂN THỊ DỮ LIỆU TỰ ĐỘNG THEO NHÀ MÁY ĐƯỢC CHỌN
     // ====================================================
     function render() {
       const table = document.getElementById("table");
@@ -443,7 +438,7 @@
       const pxDangChon = pxInput.value.trim().toLowerCase();
       const tuKhoa = searchInput.value.trim().toLowerCase();
 
-      // --- Tính toán TỔNG SỐ DƯ của Nhà máy/Phân xưởng đang chọn ---
+      // Tính tổng số dư của Nhà máy/Phân xưởng đang chọn
       let dataTinhTong = [...allFirebaseData];
       if (pxDangChon) {
         dataTinhTong = dataTinhTong.filter(item => (item.phanxuong || "").toLowerCase() === pxDangChon);
@@ -455,27 +450,32 @@
       
       const tenNhaMay = pxInput.value ? pxInput.options[pxInput.selectedIndex].text : "Toàn bộ";
       document.getElementById("tongmet").innerText = "Tổng " + tenNhaMay + ": " + Math.round(tongSoDuPX * 100) / 100 + " mét";
-      // -------------------------------------------------------------
 
+      // ĐIỀU KIỆN LỌC HIỂN THỊ: Ưu tiên lọc theo Phân Xưởng đã chọn, kết hợp tìm kiếm từ khóa
       let targetData = [];
-      if (tuKhoa) {
-        targetData = allFirebaseData.filter(item =>
-          (item.mavattu || "").toLowerCase().includes(tuKhoa) ||
-          (item.barcode || "").toLowerCase().includes(tuKhoa)
-        );
+      
+      if (pxDangChon || tuKhoa) {
+        targetData = [...allFirebaseData];
         if (pxDangChon) {
           targetData = targetData.filter(item => (item.phanxuong || "").toLowerCase() === pxDangChon);
         }
+        if (tuKhoa) {
+          targetData = targetData.filter(item =>
+            (item.mavattu || "").toLowerCase().includes(tuKhoa) ||
+            (item.barcode || "").toLowerCase().includes(tuKhoa)
+          );
+        }
       } 
+      // Nếu không chọn nhà máy & không tìm kiếm: Chỉ hiện dòng vừa nhập cuối cùng
       else if (lastAddedItem) {
         targetData = [lastAddedItem];
       }
 
       if (targetData.length === 0) {
         if (tuKhoa) {
-          table.innerHTML = `<tr><td colspan="8" style="padding:15px; color:#999;">Không tìm thấy kết quả</td></tr>`;
+          table.innerHTML = `<tr><td colspan="8" style="padding:15px; color:#999;">Không tìm thấy kết quả phù hợp</td></tr>`;
         } else {
-          table.innerHTML = `<tr><td colspan="8" class="info-text">🔍 Nhập từ khóa hoặc quét barcode để tìm kiếm...</td></tr>`;
+          table.innerHTML = `<tr><td colspan="8" class="info-text">Vui lòng chọn Phân xưởng hoặc gõ Tìm kiếm để xem danh sách...</td></tr>`;
         }
         return;
       }
@@ -504,16 +504,13 @@
       });
     }
 
-    // ====================================================
-    // TỰ ĐỘNG QUÉT VÀ XÓA MỤC XUẤT QUÁ 3 NGÀY (72 TIẾNG)
-    // ====================================================
+    // TỰ ĐỘNG QUÉT VÀ XÓA MỤC XUẤT QUÁ 3 NGÀY
     async function autoDeleteOldDoneItems(items) {
-      const baNgayTruoc = new Date().getTime() - (3 * 24 * 60 * 60 * 1000); // Mốc thời gian 3 ngày trước tính theo mili-giây
+      const baNgayTruoc = new Date().getTime() - (3 * 24 * 60 * 60 * 1000); 
       const batch = writeBatch(db);
       let coHangXoa = false;
 
       items.forEach(item => {
-        // Nếu đã xuất (done: true) và có lưu mốc thời gian 'time'
         if (item.done && item.time) {
           const thờiGianCheck = new Date(item.time).getTime();
           if (thờiGianCheck < baNgayTruoc) {
@@ -524,12 +521,7 @@
       });
 
       if (coHangXoa) {
-        try {
-          await batch.commit();
-          console.log("Hệ thống tự động dọn dẹp: Đã xóa các mục xuất quá hạn 3 ngày.");
-        } catch (err) {
-          console.error("Lỗi dọn rác tự động:", err);
-        }
+        try { await batch.commit(); } catch (err) { console.error(err); }
       }
     }
 
@@ -578,7 +570,6 @@
       const item = allFirebaseData.find(d => d.id === id);
       if (!item) return;
       try { 
-        // Khi bấm đổi sang trạng thái xuất (✅), cập nhật lại mốc 'time' hiện tại làm căn cứ tính 3 ngày sau để xóa
         await updateDoc(doc(db, "metdu", id), { 
           done: !item.done,
           time: new Date().toISOString()
@@ -598,7 +589,6 @@
       } catch (error) { console.error(error); }
     };
 
-    // EXPORT EXCEL
     window.exportExcel = function () {
       if(allFirebaseData.length === 0) { alert("Không có dữ liệu để xuất!"); return; }
       const excelData = allFirebaseData.map(i => ({
@@ -649,7 +639,7 @@
       if (e.key === "Enter") { e.preventDefault(); addData(); }
     });
 
-    // CAMERA TỐI ƯU
+    // CAMERA ĐÃ ĐƯỢC THU NHỎ KHUNG QUÉT XUỐNG 180x90
     let html5QrCode = new Html5Qrcode("reader");
     let cameraRunning = false;
 
@@ -662,7 +652,7 @@
             backCamera.id,
             {
               fps: 10, 
-              qrbox: { width: 250, height: 125 },
+              qrbox: { width: 180, height: 90 }, // <-- ĐÃ SỬA: Thu nhỏ khung xanh định vị để nhắm chính xác hơn
               aspectRatio: 1.777,
               disableFlip: true,
               videoConstraints: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -712,7 +702,7 @@
       allFirebaseData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       updateDatalist();
       render(); 
-      autoDeleteOldDoneItems(allFirebaseData); // Tự động quét và xóa rác quá 3 ngày mỗi khi dữ liệu cập nhật
+      autoDeleteOldDoneItems(allFirebaseData); 
     });
   </script>
 
