@@ -40,7 +40,6 @@
       cursor: pointer;
     }
 
-    /* Khung chia đôi để nhập số mét đã dùng và tự tính toán */
     .row-calc {
       display: flex;
       gap: 6px;
@@ -242,8 +241,8 @@
 
     <input id="search" placeholder="🔍 Gõ vào đây để tìm Mã vật tư hoặc Barcode...">
 
-    <h3 id="tongmet" style="display:inline-block; margin-right: 10px;">Tổng: 0 mét</h3>
-    <span style="font-size:11px; color:#c62828; font-weight:bold;">⚡ Đã bật chế độ tự tính số dư tự động</span>
+    <h3 id="tongmet" style="display:inline-block; margin-right: 10px;">Tổng nhà máy: 0 mét</h3>
+    <div style="font-size:11px; color:#e65100; font-weight:bold; margin-top: 2px;">⏰ Đã bật: Mục xuất (✅) tự động xóa hoàn toàn sau 3 ngày</div>
 
     <hr style="margin: 6px 0; border: 0; border-top: 1px solid #ccc;">
   </div>
@@ -324,13 +323,10 @@
       } catch (e) { console.error(e); }
     }
 
-    // ==========================================
-    // HÀM TỰ ĐỘNG TRA CỨU SỐ MÉT CŨ KHI GÕ/QUÉT MÃ
-    // ==========================================
+    // TỰ ĐỘNG TRA CỨU SỐ MÉT CŨ
     window.checkAndFillGocData = function (val, type) {
       if(!val.trim()) return;
       
-      // Tìm xem mã này/barcode này đã từng có lịch sử nhập trên hệ thống chưa
       const foundItem = allFirebaseData.find(item => {
         if(type === 'barcode') return (item.barcode || '').toLowerCase() === val.trim().toLowerCase();
         if(type === 'mavattu') return (item.mavattu || '').toLowerCase() === val.trim().toLowerCase();
@@ -338,26 +334,21 @@
       });
 
       if(foundItem) {
-        // Nếu tìm thấy, tự động điền số mét hiện tại của nó vào ô "Mét ban đầu"
         metgocInput.value = foundItem.metdu || 0;
         tinhToanSoDu();
       }
     };
 
-    // ==========================================
-    // HÀM TỰ ĐỘNG TRỪ SỐ MÉT: Dư = Gốc - Đã dùng
-    // ==========================================
+    // TỰ ĐỘNG TRỪ SỐ MÉT
     window.tinhToanSoDu = function () {
       const goc = Number(metgocInput.value) || 0;
       const dadung = Number(metdadungInput.value) || 0;
       
       if(metdadungInput.value.trim() === "") {
-        // Nếu chưa nhập số mét đã dùng, mặc định mét dư bằng chính mét gốc ban đầu
         metduInput.value = goc;
       } else {
-        // Tự động trừ ra kết quả số mét dư còn lại
         const ketqua = goc - dadung;
-        metduInput.value = Math.round(ketqua * 100) / 100; // Làm tròn 2 chữ số thập phân
+        metduInput.value = Math.round(ketqua * 100) / 100; 
       }
     };
 
@@ -389,13 +380,14 @@
       if (!barcode && !mavattu) { alert("Vui lòng nhập Barcode hoặc Mã vật tư"); return; }
 
       try {
+        const nowIso = new Date().toISOString();
         const docRef = await addDoc(collection(db, "metdu"), {
           barcode,
           mavattu,
           metdu: Number(metdu) || 0,
           phanxuong: px,
           done: false,
-          time: new Date().toISOString(),
+          time: nowIso,
           ngay: new Date().toLocaleDateString("vi-VN")
         });
 
@@ -406,7 +398,8 @@
           metdu: Number(metdu) || 0,
           phanxuong: px,
           done: false,
-          ngay: new Date().toLocaleDateString("vi-VN")
+          ngay: new Date().toLocaleDateString("vi-VN"),
+          time: nowIso
         };
 
         barcodeInput.value = "";
@@ -439,9 +432,9 @@
       });
     }
 
-    // ====================
-    // HIỂN THỊ DỮ LIỆU
-    // ====================
+    // ====================================================
+    // HIỂN THỊ VÀ TÍNH TỔNG SỐ DƯ THEO NHÀ MÁY ĐƯỢC CHỌN
+    // ====================================================
     function render() {
       const table = document.getElementById("table");
       table.innerHTML = "";
@@ -450,8 +443,21 @@
       const pxDangChon = pxInput.value.trim().toLowerCase();
       const tuKhoa = searchInput.value.trim().toLowerCase();
 
-      let targetData = [];
+      // --- Tính toán TỔNG SỐ DƯ của Nhà máy/Phân xưởng đang chọn ---
+      let dataTinhTong = [...allFirebaseData];
+      if (pxDangChon) {
+        dataTinhTong = dataTinhTong.filter(item => (item.phanxuong || "").toLowerCase() === pxDangChon);
+      }
+      let tongSoDuPX = 0;
+      dataTinhTong.forEach(item => {
+        tongSoDuPX += Number(item.metdu || 0);
+      });
+      
+      const tenNhaMay = pxInput.value ? pxInput.options[pxInput.selectedIndex].text : "Toàn bộ";
+      document.getElementById("tongmet").innerText = "Tổng " + tenNhaMay + ": " + Math.round(tongSoDuPX * 100) / 100 + " mét";
+      // -------------------------------------------------------------
 
+      let targetData = [];
       if (tuKhoa) {
         targetData = allFirebaseData.filter(item =>
           (item.mavattu || "").toLowerCase().includes(tuKhoa) ||
@@ -471,13 +477,10 @@
         } else {
           table.innerHTML = `<tr><td colspan="8" class="info-text">🔍 Nhập từ khóa hoặc quét barcode để tìm kiếm...</td></tr>`;
         }
-        document.getElementById("tongmet").innerText = "Tổng: 0 mét";
         return;
       }
 
-      let tong = 0;
       targetData.forEach((item) => {
-        tong += Number(item.metdu || 0);
         const htmlDate = formatToInputDate(item.ngay);
 
         table.innerHTML += `
@@ -499,8 +502,35 @@
           </tr>
         `;
       });
+    }
 
-      document.getElementById("tongmet").innerText = "Tổng: " + Math.round(tong * 100) / 100 + " mét";
+    // ====================================================
+    // TỰ ĐỘNG QUÉT VÀ XÓA MỤC XUẤT QUÁ 3 NGÀY (72 TIẾNG)
+    // ====================================================
+    async function autoDeleteOldDoneItems(items) {
+      const baNgayTruoc = new Date().getTime() - (3 * 24 * 60 * 60 * 1000); // Mốc thời gian 3 ngày trước tính theo mili-giây
+      const batch = writeBatch(db);
+      let coHangXoa = false;
+
+      items.forEach(item => {
+        // Nếu đã xuất (done: true) và có lưu mốc thời gian 'time'
+        if (item.done && item.time) {
+          const thờiGianCheck = new Date(item.time).getTime();
+          if (thờiGianCheck < baNgayTruoc) {
+            batch.delete(doc(db, "metdu", item.id));
+            coHangXoa = true;
+          }
+        }
+      });
+
+      if (coHangXoa) {
+        try {
+          await batch.commit();
+          console.log("Hệ thống tự động dọn dẹp: Đã xóa các mục xuất quá hạn 3 ngày.");
+        } catch (err) {
+          console.error("Lỗi dọn rác tự động:", err);
+        }
+      }
     }
 
     window.updateMetDuDirectly = async function (e, id) {
@@ -548,8 +578,15 @@
       const item = allFirebaseData.find(d => d.id === id);
       if (!item) return;
       try { 
-        await updateDoc(doc(db, "metdu", id), { done: !item.done }); 
-        if(lastAddedItem && lastAddedItem.id === id) lastAddedItem.done = !item.done;
+        // Khi bấm đổi sang trạng thái xuất (✅), cập nhật lại mốc 'time' hiện tại làm căn cứ tính 3 ngày sau để xóa
+        await updateDoc(doc(db, "metdu", id), { 
+          done: !item.done,
+          time: new Date().toISOString()
+        }); 
+        if(lastAddedItem && lastAddedItem.id === id) {
+          lastAddedItem.done = !item.done;
+          lastAddedItem.time = new Date().toISOString();
+        }
       } catch (error) { console.error(error); }
     };
 
@@ -603,7 +640,7 @@
           }
           alert("Import thành công!");
         } catch (err) { alert("Lỗi đọc file."); }
-        e.target.value = ""; 
+          e.target.value = ""; 
       };
       reader.readAsArrayBuffer(file);
     });
@@ -640,8 +677,6 @@
               navigator.vibrate?.(100);         
               
               searchInput.value = decodedText;
-              
-              // Tự động kiểm tra lịch sử số mét gốc của barcode vừa quét
               checkAndFillGocData(decodedText, 'barcode');
 
               setTimeout(() => {
@@ -677,6 +712,7 @@
       allFirebaseData = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       updateDatalist();
       render(); 
+      autoDeleteOldDoneItems(allFirebaseData); // Tự động quét và xóa rác quá 3 ngày mỗi khi dữ liệu cập nhật
     });
   </script>
 
