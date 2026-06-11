@@ -11,17 +11,26 @@
   <style>
     body {
       font-family: Arial, sans-serif;
-      padding: 10px;
       background: #f5f5f5;
+      margin: 0;
+      padding: 0; /* Bỏ padding toàn trang để bảng tràn hết cỡ */
+    }
+
+    /* Khung chứa các ô nhập liệu phía trên trải rộng 100% bằng bảng */
+    .container {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 8px 0 8px; /* Chỉ tạo khoảng cách nhẹ với viền màn hình */
     }
 
     input, select, button {
       width: 100%;
       padding: 10px;
-      margin: 5px 0;
+      margin: 4px 0;
       box-sizing: border-box;
       border-radius: 8px;
       border: 1px solid #ccc;
+      font-size: 15px;
     }
 
     button {
@@ -32,42 +41,61 @@
       cursor: pointer;
     }
 
+    /* Tối ưu bảng phẳng đều, rộng khít bằng phần nhập liệu phía trên */
     table {
       width: 100%;
       border-collapse: collapse;
       margin-top: 10px;
       background: white;
+      table-layout: fixed; 
     }
 
     th, td {
-      border: 1px solid #ccc;
-      padding: 6px;
+      border: 1px solid #ddd;
+      padding: 6px 2px;
       text-align: center;
-      font-size: 14px;
+      font-size: 12px; 
+      word-break: break-all; 
+      vertical-align: middle;
     }
+
+    th {
+      background-color: #eeeeee;
+      font-weight: bold;
+    }
+
+    /* Tỷ lệ chia cột chính xác chống tràn */
+    th:nth-child(1), td:nth-child(1) { width: 7%; }   
+    th:nth-child(2), td:nth-child(2) { width: 24%; }  
+    th:nth-child(3), td:nth-child(3) { width: 21%; }  
+    th:nth-child(4), td:nth-child(4) { width: 11%; }  
+    th:nth-child(5), td:nth-child(5) { width: 13%; }  
+    th:nth-child(6), td:nth-child(6) { width: 14%; }  
+    th:nth-child(7), td:nth-child(7) { width: 10%; }  
+    th:nth-child(8), td:nth-child(8) { width: 10%; }  
 
     .done {
       background: #ffdada;
       color: #777;
     }
     
-    .done td:not(:nth-child(4)) {
+    .done td:not(:nth-child(1)):not(:nth-child(6)):not(:nth-child(7)) {
       text-decoration: line-through;
     }
 
     h3 {
-      margin-bottom: 10px;
+      margin: 10px 0 5px 0;
     }
 
     #reader {
       width: 100%;
-      margin-top: 10px;
+      margin-top: 5px;
     }
 
     .topbtn {
       display: flex;
       gap: 5px;
-      margin-bottom: 5px;
+      margin-bottom: 4px;
     }
 
     .topbtn button {
@@ -77,68 +105,111 @@
     .btn-danger {
       background: #d32f2f;
     }
+    
+    .btn-warning {
+      background: #f57c00;
+      margin-bottom: 4px;
+    }
 
     .input-edit-met {
-      width: 70px;
-      padding: 4px;
+      width: 100%;
+      padding: 3px 0;
       margin: 0;
       text-align: center;
+      border: 1px dashed #bbb;
       border-radius: 4px;
+      font-size: 12px;
+      background: transparent;
+      box-sizing: border-box;
+    }
+
+    .input-edit-date {
+      width: 100%;
+      padding: 3px 0;
+      margin: 0;
+      font-size: 11px;
+      text-align: center;
+      border: 1px dashed #bbb;
+      border-radius: 4px;
+      background: transparent;
+      box-sizing: border-box;
+      -webkit-appearance: none;
+    }
+    
+    td button {
+      width: auto;
+      padding: 4px 6px;
+      margin: 0;
+      font-size: 12px;
+      border-radius: 4px;
+      display: inline-block;
     }
     
     .cam-locked {
       border: 3px solid #ff9800 !important;
+    }
+
+    .chk-row {
+      width: 15px;
+      height: 15px;
+      cursor: pointer;
+      margin: 0;
+      vertical-align: middle;
     }
   </style>
 </head>
 
 <body>
 
-  <h3>📦 Quản lý mét dư</h3>
+  <div class="container">
+    <h3>📦 Quản lý mét dư</h3>
 
-  <select id="px">
-    <option value="">-- Chọn phân xưởng --</option>
-    <option value="may1">May 1</option>
-    <option value="may2">May 2</option>
-    <option value="may3">May 3</option>
-    <option value="inep">In ép</option>
-  </select>
+    <select id="px">
+      <option value="">-- Chọn phân xưởng --</option>
+      <option value="may1">May 1</option>
+      <option value="may2">May 2</option>
+      <option value="may3">May 3</option>
+      <option value="inep">In ép</option>
+    </select>
 
-  <input id="barcode" placeholder="Barcode">
+    <input id="barcode" placeholder="Barcode">
 
-  <div id="reader"></div>
+    <div id="reader"></div>
 
-  <button id="toggleCamBtn" onclick="toggleCamera()">
-    📷 Tắt camera
-  </button>
-
-  <input id="mavattu" list="listMavattu" placeholder="Mã vật tư">
-  <datalist id="listMavattu"></datalist>
-
-  <input id="metdu" type="number" placeholder="Mét dư">
-
-  <button onclick="addData()">➕ Lưu (Enter)</button>
-
-  <div class="topbtn">
-    <button onclick="exportExcel()">📥 Xuất Excel</button>
-    <button onclick="document.getElementById('importFile').click()">
-      📤 Nhập Excel
+    <button id="toggleCamBtn" onclick="toggleCamera()">
+      📷 Tắt camera
     </button>
+
+    <input id="mavattu" list="listMavattu" placeholder="Mã vật tư">
+    <datalist id="listMavattu"></datalist>
+
+    <input id="metdu" type="number" placeholder="Mét dư">
+
+    <button onclick="addData()">➕ Lưu (Enter)</button>
+
+    <div class="topbtn">
+      <button onclick="exportExcel()">📥 Xuất Excel</button>
+      <button onclick="document.getElementById('importFile').click()">
+        📤 Nhập Excel
+      </button>
+    </div>
+    
+    <button class="btn-warning" onclick="deleteSelectedRows()">🗑️ Xóa các mục đã chọn</button>
+    <button class="btn-danger" onclick="clearAllData()">⚠️ Xóa tất cả dữ liệu</button>
+
+    <input type="file" id="importFile" hidden>
+
+    <input id="search" placeholder="🔍 Tìm theo mã vật tư hoặc barcode">
+
+    <h3 id="tongmet">Tổng: 0 mét</h3>
+
+    <hr style="margin: 8px 0; border: 0; border-top: 1px solid #ccc;">
   </div>
-  
-  <button class="btn-danger" onclick="clearAllData()">🗑️ Xóa tất cả dữ liệu</button>
-
-  <input type="file" id="importFile" hidden>
-
-  <input id="search" placeholder="🔍 Tìm theo mã vật tư hoặc barcode">
-
-  <h3 id="tongmet">Tổng: 0 mét</h3>
-
-  <hr>
 
   <table>
     <thead>
       <tr>
+        <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll(this)" style="width:15px; height:15px; margin:0; vertical-align:middle;"></th>
         <th>Barcode</th>
         <th>Mã</th>
         <th>PX</th>
@@ -164,8 +235,7 @@
       writeBatch,
       getDocs,
       query,
-      orderBy,
-      limit
+      orderBy
     } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
     const firebaseConfig = {
@@ -205,6 +275,21 @@
       } catch (e) {
         console.error(e);
       }
+    }
+
+    function formatToInputDate(dateStr) {
+      if(!dateStr || !dateStr.includes('/')) {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
+      const parts = dateStr.split('/');
+      return `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
+    }
+
+    function formatFromInputDate(dateStr) {
+      if(!dateStr) return new Date().toLocaleDateString("vi-VN");
+      const parts = dateStr.split('-');
+      return `${parseInt(parts[2])}/${parseInt(parts[1])}/${parts[0]}`;
     }
 
     // ====================
@@ -248,10 +333,8 @@
         metduInput.value = "";
         
         document.activeElement.blur();
-        
         isCameraScanningAllowed = true;
         document.getElementById("reader").classList.remove("cam-locked");
-        
         barcodeInput.focus();
       } catch (error) {
         console.error("Lỗi thêm dữ liệu: ", error);
@@ -278,11 +361,12 @@
     }
 
     // ====================
-    // HIỂN THỊ
+    // HIỂN THỊ DỮ LIỆU
     // ====================
     function render() {
       const table = document.getElementById("table");
       table.innerHTML = "";
+      document.getElementById("selectAll").checked = false;
 
       const pxDangChon = pxInput.value.trim().toLowerCase();
       const tuKhoa = searchInput.value.trim().toLowerCase();
@@ -303,27 +387,35 @@
       let tong = 0;
       filteredData.forEach((item) => {
         tong += Number(item.metdu || 0);
+        const htmlDate = formatToInputDate(item.ngay);
+
         table.innerHTML += `
           <tr class="${item.done ? 'done' : ''}">
+            <td>
+              <input type="checkbox" class="chk-row" value="${item.id}">
+            </td>
             <td>${item.barcode || ""}</td>
             <td>${item.mavattu || ""}</td>
             <td>${item.phanxuong || ""}</td>
             <td>
-              <input type="number" class="input-edit-met" value="${item.metdu || 0}" 
+              <input type="number" step="any" class="input-edit-met" value="${item.metdu || 0}" 
                 onkeydown="updateMetDuDirectly(event, '${item.id}')">
             </td>
-            <td>${item.ngay || ""}</td>
+            <td>
+              <input type="date" class="input-edit-date" value="${htmlDate}" 
+                onchange="updateNgayDirectly(this.value, '${item.id}')">
+            </td>
             <td>
               <button onclick="toggle('${item.id}')">${item.done ? "✅" : "📦"}</button>
             </td>
             <td>
-              <button onclick="del('${item.id}')">❌</button>
+              <button style="background:#d32f2f;" onclick="del('${item.id}')">❌</button>
             </td>
           </tr>
         `;
       });
 
-      document.getElementById("tongmet").innerText = "Tổng: " + tong + " mét (Hiển thị 50 dòng mới nhất)";
+      document.getElementById("tongmet").innerText = "Tổng: " + tong + " mét";
     }
 
     window.updateMetDuDirectly = async function (e, id) {
@@ -343,6 +435,41 @@
       }
     };
 
+    window.updateNgayDirectly = async function (newDateVal, id) {
+      if(!newDateVal) return;
+      const formattedDate = formatFromInputDate(newDateVal);
+      try {
+        await updateDoc(doc(db, "metdu", id), { ngay: formattedDate });
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    window.toggleSelectAll = function (master) {
+      const checkboxes = document.querySelectorAll('.chk-row');
+      checkboxes.forEach(chk => chk.checked = master.checked);
+    };
+
+    window.deleteSelectedRows = async function () {
+      const checkboxes = document.querySelectorAll('.chk-row:checked');
+      if (checkboxes.length === 0) {
+        alert("Vui lòng tích chọn ít nhất một mục để xóa!");
+        return;
+      }
+      if (!confirm(`Bạn chắc chắn muốn XÓA ${checkboxes.length} mục đã chọn này?`)) return;
+
+      try {
+        const batch = writeBatch(db);
+        checkboxes.forEach(chk => {
+          batch.delete(doc(db, "metdu", chk.value));
+        });
+        await batch.commit();
+        alert(`Đã xóa thành công ${checkboxes.length} mục!`);
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
     window.toggle = async function (id) {
       const item = data.find(d => d.id === id);
       if (!item) return;
@@ -359,40 +486,31 @@
     };
 
     window.clearAllData = async function () {
-      if (!confirm("⚠️ Chắc chắn muốn XÓA TẤT CẢ vật tư số dư?")) return;
+      if (!confirm("⚠️ Chắc chắn muốn XÓA TOÀN BỘ vật tư số dư trên hệ thống?")) return;
       try {
         const querySnapshot = await getDocs(collection(db, "metdu"));
         if(querySnapshot.empty) return;
         const batch = writeBatch(db);
         querySnapshot.forEach((docSnap) => { batch.delete(docSnap.ref); });
         await batch.commit();
-        alert("Đã xóa toàn bộ!");
+        alert("Đã xóa toàn bộ kho thành công!");
       } catch (error) { console.error(error); }
     };
 
     // EXPORT EXCEL
-    window.exportExcel = async function () {
-      try {
-        const querySnapshot = await getDocs(collection(db, "metdu"));
-        const allData = querySnapshot.docs.map(d => d.data());
-        allData.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
-
-        const excelData = allData.map(i => ({
-          Barcode: i.barcode || "",
-          MaVatTu: i.mavattu || "",
-          PhanXuong: i.phanxuong || "",
-          MetDu: i.metdu || 0,
-          Ngay: i.ngay || "",
-          Done: i.done ? "X" : ""
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(excelData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "MetDu");
-        XLSX.writeFile(wb, "metdu_tatca.xlsx");
-      } catch (error) {
-        console.error("Lỗi xuất Excel: ", error);
-      }
+    window.exportExcel = function () {
+      const excelData = data.map(i => ({
+        Barcode: i.barcode || "",
+        MaVatTu: i.mavattu || "",
+        PhanXuong: i.phanxuong || "",
+        MetDu: i.metdu || 0,
+        Ngay: i.ngay || "",
+        Done: i.done ? "X" : ""
+      }));
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "MetDu");
+      XLSX.writeFile(wb, "metdu_all.xlsx");
     };
 
     // IMPORT EXCEL
@@ -409,6 +527,8 @@
 
           for (const row of json) {
             const barcodeVal = row.Barcode ? String(row.Barcode).trim() : "";
+            if (barcodeVal && data.some(i => i.barcode === barcodeVal)) continue;
+
             await addDoc(collection(db, "metdu"), {
               barcode: barcodeVal,
               mavattu: row.MaVatTu ? String(row.MaVatTu).trim() : "",
@@ -433,9 +553,7 @@
       }
     });
 
-    // ==========================================
-    // CAMERA QUÉT BARCODE (ĐÃ TỐI ƯU AUTO FOCUS)
-    // ==========================================
+    // CAMERA QUÉT BARCODE
     let html5QrCode = new Html5Qrcode("reader");
     let cameraRunning = false;
     let currentCameraId = null;
@@ -451,14 +569,13 @@
             currentCameraId,
             {
               fps: 15,
-              qrbox: { width: 300, height: 150 },
+              qrbox: { width: 260, height: 130 },
               aspectRatio: 1.777,
               disableFlip: true,
               videoConstraints: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } }
             },
             (decodedText) => {
               if (!isCameraScanningAllowed) return;
-
               isCameraScanningAllowed = false;
               document.getElementById("reader").classList.add("cam-locked");
 
@@ -466,10 +583,9 @@
               playBeepSound();                  
               navigator.vibrate?.(100);         
               
-              // Sử dụng setTimeout (150ms) đảm bảo kích hoạt bàn phím ảo ổn định trên cả iOS & Android
               setTimeout(() => {
                 metduInput.focus();
-                metduInput.select(); // Bôi đen sẵn ô Số mét để tiện gõ đè nhập liệu luôn
+                metduInput.select(); 
               }, 150);
             }
           );
@@ -495,7 +611,7 @@
     pxInput.addEventListener("change", () => { updateDatalist(); render(); });
     searchInput.addEventListener("input", () => { render(); });
 
-    const q = query(collection(db, "metdu"), orderBy("time", "desc"), limit(50));
+    const q = query(collection(db, "metdu"), orderBy("time", "desc"));
     onSnapshot(q, (snap) => {
       data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       updateDatalist();
