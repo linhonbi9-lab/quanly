@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0b2941">
+  <meta name="description" content="Quản lý kho vật tư PU may giày - SAP, P/O, cây PU, mét dư, vị trí và mã QR.">
+  <title>KHO PU · Quản lý vật tư may giày</title>
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./vendor/supabase.min.js"></script>
+  <script defer src="./vendor/html5-qrcode.min.js"></script>
+  <script defer src="./vendor/qrcode.min.js"></script>
+  <script defer src="./vendor/exceljs.min.js"></script>
+  <script defer src="./config.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <section id="login-screen" class="login-screen" hidden>
+    <div class="login-card">
+      <div class="login-icon">PU</div>
+      <div class="small-heading">HỆ THỐNG KHO PU</div>
+      <h1>Đăng nhập kho vật tư</h1>
+      <p class="secondary">Quản lý xuất nhập, mét dư và vị trí từng đầu cây. Dùng chung dữ liệu giữa các thiết bị.</p>
+      <form id="login-form" class="stack">
+        <label>Email nhân viên<input type="email" name="email" autocomplete="username" required placeholder="nhanvien@congty.vn"></label>
+        <label>Mật khẩu<input type="password" name="password" autocomplete="current-password" required></label>
+        <button class="btn primary block" type="submit">Đăng nhập</button>
+      </form>
+      <p class="hint">Tài khoản do quản lý kho tạo trong Supabase → Authentication → Users.</p>
+      <div id="login-error" class="error-text" role="alert"></div>
+    </div>
+  </section>
+  <div id="app-shell" hidden>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="Trang chủ kho PU"><span class="brand-icon">PU</span><span><b>QUẢN LÝ KHO PU</b><small>May giày • Xuất – nhập – tồn</small></span></a>
+      <div class="topbar-right"><span id="signed-user" class="signed-user"></span><button class="btn subtle small" id="signout">Đăng xuất</button></div>
+    </header>
+    <nav class="tabbar" aria-label="Chức năng">
+      <button class="tab active" data-tab="home">▦ <span>Tổng quan</span></button>
+      <button class="tab" data-tab="inbound">↧ <span>Nhập kho</span></button>
+      <button class="tab" data-tab="issue">↗ <span>Xuất kho</span></button>
+      <button class="tab" data-tab="rolls">▥ <span>Đầu cây</span></button>
+      <button class="tab" data-tab="scan">▣ <span>Quét QR</span></button>
+      <button class="tab" data-tab="locations">⌘ <span>Vị trí</span></button>
+      <button class="tab" data-tab="history">◷ <span>Lịch sử</span></button>
+      <button class="tab" data-tab="reports">▤ <span>Báo cáo</span></button>
+    </nav>
+    <main class="main-container">
+      <div id="loading" class="loading">Đang tải dữ liệu kho...</div>
+      <div id="view"></div>
+    </main>
+    <footer>Kho PU · Dữ liệu đồng bộ trực tuyến và phân quyền đăng nhập</footer>
+  </div>
+  <section id="setup-screen" class="login-screen" hidden>
+    <div class="login-card">
+      <div class="login-icon">⚙</div>
+      <h1>Chưa cấu hình dữ liệu kho</h1>
+      <p class="secondary">Website đã sẵn sàng cho GitHub Pages. Để dùng chung dữ liệu, hãy tạo Supabase và điền Project URL cùng Publishable key vào file <code>config.js</code>.</p>
+      <p class="hint">Xem file README_HUONG_DAN.md trong bộ mã nguồn. Tuyệt đối không đưa Secret / Service role key vào GitHub.</p>
+    </div>
+  </section>
+</body>
+</html>
