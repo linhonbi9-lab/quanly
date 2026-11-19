@@ -21,7 +21,8 @@ const colorLabel = r => '<span class="tag ' + status(r) + '">' + statusText[stat
 const state = {
   client:null,session:null,rolls:[],saps:[],locations:[],movements:[],
   active:"home",selected:null,lastCodes:[],qr:null,qrRunning:false,scanHandled:false,busy:false,
-  find:"",filterArea:"",filterRack:"",filterBin:"",issueSearch:"",selectedIssue:null
+  find:"",filterArea:"",filterRack:"",filterBin:"",issueSearch:"",selectedIssue:null,
+  issuePo:"",issueSap:""
 };
 let toastTimer;
 function toast(message, error=false) {
@@ -101,7 +102,11 @@ async function show(tab,options={}) {
   if(state.qrRunning) await stopScanner();
   state.active=tab;
   if(options.code) state.selected=options.code;
-  if(tab==="issue" && options.code) state.selectedIssue=options.code;
+  if(tab==="issue" && options.code) {
+    state.selectedIssue=options.code;
+    const roll=state.rolls.find(r=>r.roll_code===options.code);
+    if(roll){state.issuePo=roll.po;state.issueSap=roll.sap_items?.sap_code||"";}
+  }
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
   if(tab==="labels" || tab==="detail") document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
   renderCurrent();
@@ -180,23 +185,66 @@ function updateMeterPreview() {
   update();
 }
 
+function issuePoRolls() {
+  const po=state.issuePo.trim().toLocaleLowerCase("vi-VN");
+  if(!po)return [];
+  return state.rolls.filter(r=>String(r.po).toLocaleLowerCase("vi-VN")===po);
+}
+function issueSapOptions() {
+  return [...new Set(issuePoRolls().map(r=>r.sap_items?.sap_code).filter(Boolean))].sort();
+}
 function issueCandidates() {
+  if(!state.issuePo.trim() || !state.issueSap)return [];
   const q=state.issueSearch.trim().toLocaleLowerCase("vi-VN");
-  return state.rolls.filter(r=>Number(r.remaining_meters)>0 && (!q ||
-    [r.roll_code,r.sap_items?.sap_code,r.po,r.sap_items?.description,locText(r)]
+  return issuePoRolls().filter(r=>r.sap_items?.sap_code===state.issueSap &&
+    Number(r.remaining_meters)>0 && (!q ||
+    [r.roll_code,r.sap_items?.description,locText(r)]
       .join(" ").toLocaleLowerCase("vi-VN").includes(q)));
 }
+function issueLedger() {
+  const rollsById=new Map(state.rolls.map(r=>[r.id,r]));
+  const balances=new Map(state.rolls.map(r=>[r.id,Number(r.remaining_meters)]));
+  return state.movements.filter(m=>m.movement_type==="OUT")
+    .sort((a,b)=>new Date(b.created_at)-new Date(a.created_at) || String(b.id).localeCompare(String(a.id)))
+    .map(m=>{
+      const roll=rollsById.get(m.roll_id);
+      const remainingAfter=balances.get(m.roll_id);
+      if(roll)balances.set(m.roll_id,remainingAfter+Number(m.meters));
+      return {...m,roll,remainingAfter};
+    })
+    .filter(m=>m.roll && m.roll.po.toLocaleLowerCase("vi-VN")===state.issuePo.trim().toLocaleLowerCase("vi-VN") &&
+      m.roll.sap_items?.sap_code===state.issueSap);
+}
 function renderIssue() {
+  const options=issueSapOptions();
+  const poRolls=issuePoRolls();
   const matches=issueCandidates();
-  const picked=state.rolls.find(r=>r.roll_code===state.selectedIssue);
+  const picked=state.rolls.find(r=>r.roll_code===state.selectedIssue &&
+    r.po.toLocaleLowerCase("vi-VN")===state.issuePo.trim().toLocaleLowerCase("vi-VN") &&
+    r.sap_items?.sap_code===state.issueSap);
   const balance=picked?Number(picked.remaining_meters):0;
+  const ledger=state.issuePo && state.issueSap?issueLedger():[];
+  const totalIssued=ledger.reduce((sum,m)=>sum+Number(m.meters),0);
+  const remainingForSap=poRolls.filter(r=>r.sap_items?.sap_code===state.issueSap)
+    .reduce((sum,r)=>sum+Number(r.remaining_meters),0);
+  const emptyMessage=!state.issuePo.trim()?"Hãy nhập P/O để bắt đầu xuất kho.":
+    !poRolls.length?"Không tìm thấy P/O này trong kho.":
+    !state.issueSap?"Hãy chọn mã SAP của P/O này.":
+    "Không có đầu cây còn hàng phù hợp với P/O và SAP đã chọn.";
   const pickedDetails=picked?'<div class="chosen-roll"><div><small>Đầu cây đã chọn</small><h2>'+esc(picked.roll_code)+
     '</h2><p>SAP: <b>'+esc(picked.sap_items?.sap_code)+'</b> · P/O: '+esc(picked.po)+
     '</p><p>Ban đầu: '+money(picked.initial_meters)+' m · Vị trí: '+esc(locText(picked))+'</p></div><div class="chosen-balance"><small>Mét còn lại</small><strong>'+money(balance)+' m</strong></div></div>':
     '<div class="notice">Chọn một đầu cây trong danh sách bên dưới để xuất kho.</div>';
-  return page("Xuất kho PU","Chọn đầu cây → xem mét còn → nhập số mét xuất → xác nhận.",
+  return page("Xuất kho PU","Nhập P/O → chọn SAP → chọn đầu cây → nhập mét xuất.",
     action("▣ Quét QR","scan-tab",true))+
-    card('<h2>1. Đầu cây cần xuất</h2>'+pickedDetails+
+    card('<h2>1. Nhập P/O và chọn mã SAP</h2><div class="form-grid">'+
+      '<label>P/O cần xuất<input id="issue-po" list="issue-po-list" placeholder="Nhập chính xác P/O, ví dụ PO2026-001" value="'+esc(state.issuePo)+'" autocomplete="off">'+
+      '<datalist id="issue-po-list">'+[...new Set(state.rolls.map(r=>r.po))].sort().map(po=>'<option value="'+esc(po)+'">').join("")+'</datalist></label>'+
+      '<label>Mã SAP thuộc P/O<select id="issue-sap" '+(!poRolls.length?'disabled':'')+'><option value="">-- Chọn mã SAP --</option>'+
+      options.map(sap=>'<option value="'+esc(sap)+'" '+(sap===state.issueSap?'selected':'')+'>'+esc(sap)+'</option>').join("")+'</select></label></div>'+
+      '<p class="hint">'+(poRolls.length?poRolls.length+' đầu cây thuộc P/O này.':'Nhập đúng P/O để hiển thị danh sách SAP trong đơn hàng.')+
+      (state.issueSap?' Tổng số mét còn của SAP '+esc(state.issueSap)+': <b>'+money(remainingForSap)+' m</b>.':'')+'</p>')+
+    card('<h2>2. Đầu cây cần xuất</h2>'+pickedDetails+
       (picked && balance>0?'<form id="quick-issue-form" class="issue-form">'+
         '<input type="hidden" name="code" value="'+esc(picked.roll_code)+'">'+
         '<label>Số mét muốn xuất<input type="number" name="meters" inputmode="decimal" min="0.01" step="0.01" max="'+balance+'" placeholder="Ví dụ: 12.5" required></label>'+
@@ -206,15 +254,23 @@ function renderIssue() {
         '<button class="btn primary" type="submit">↗ Xác nhận xuất kho</button></form>':
         picked?'<div class="notice">Cây này đã xuất hết. Hãy chọn cây khác.</div>':'')+
       '<p class="hint">Phần mềm tự trừ số mét xuất và ghi lịch sử. Không thể xuất vượt số mét còn lại.</p>')+
-    card('<h2>2. Chọn đầu cây còn hàng</h2><label>Tìm theo mã cây, SAP, P/O hoặc ô kho'+
-      '<input id="issue-search" placeholder="Nhập SAP / P/O / mã cây / ô..." value="'+esc(state.issueSearch)+'"></label>'+
-      '<p class="hint">'+matches.length+' đầu cây phù hợp, hiển thị tối đa 300 cây. Mỗi ô kho có thể chứa nhiều cây.</p>'+
+    card('<h2>3. Chọn đầu cây thuộc P/O và SAP</h2><label>Tìm thêm theo mã đầu cây hoặc vị trí ô kho'+
+      '<input id="issue-search" placeholder="Tìm mã cây / ô kho..." value="'+esc(state.issueSearch)+'"></label>'+
+      '<p class="hint">'+matches.length+' đầu cây còn hàng, hiển thị tối đa 300 cây. Một ô có thể chứa nhiều cây.</p>'+
       '<div class="table-scroll"><table><thead><tr><th>Mã đầu cây / SAP</th><th>P/O</th><th>Mét ban đầu</th><th>Mét còn</th><th>Vị trí</th><th></th></tr></thead><tbody>'+
       matches.slice(0,300).map(r=>'<tr class="'+(r.roll_code===state.selectedIssue?'issue-selected':status(r))+'"><td><b>'+esc(r.roll_code)+'</b><small>'+esc(r.sap_items?.sap_code)+'</small></td>'+
         '<td>'+esc(r.po)+'</td><td>'+money(r.initial_meters)+' m</td><td><b>'+money(r.remaining_meters)+' m</b></td><td>'+esc(locText(r))+'</td>'+
         '<td><button class="btn '+(r.roll_code===state.selectedIssue?'primary':'subtle')+' small" data-issue-code="'+esc(r.roll_code)+'">'+
         (r.roll_code===state.selectedIssue?'✓ Đã chọn':'Chọn cây')+'</button></td></tr>').join("")+
-      (matches.length?"":'<tr><td colspan="6">'+empty("Không có đầu cây còn hàng phù hợp.")+'</td></tr>')+
+      (matches.length?"":'<tr><td colspan="6">'+empty(emptyMessage)+'</td></tr>')+
+      '</tbody></table></div>')+
+    card('<h2>4. Bảng kê đã xuất của P/O và SAP</h2>'+
+      '<p class="hint">'+ledger.length+' lượt xuất · Tổng đã xuất: <b>'+money(totalIssued)+' m</b>. Cột dư là mét còn ngay sau từng lần xuất.</p>'+
+      (ledger.length?action("↓ Tải bảng kê Excel","export-issue-ledger",true):"")+
+      '<div class="table-scroll"><table><thead><tr><th>Thời gian</th><th>P/O</th><th>SAP</th><th>Mã đầu cây</th><th>Mét đầu cây</th><th>Mét xuất</th><th>Dư sau xuất</th><th>Phân xưởng</th></tr></thead><tbody>'+
+      ledger.slice(0,200).map(m=>'<tr><td>'+time(m.created_at)+'</td><td>'+esc(m.roll.po)+'</td><td>'+esc(m.roll.sap_items?.sap_code)+'</td>'+
+        '<td><b>'+esc(m.roll.roll_code)+'</b></td><td>'+money(m.roll.initial_meters)+' m</td><td>'+money(m.meters)+' m</td><td><b>'+money(m.remainingAfter)+' m</b></td><td>'+esc(m.workshop||"—")+'</td></tr>').join("")+
+      (ledger.length?"":'<tr><td colspan="8">'+empty("Chưa có lượt xuất nào cho P/O và SAP đã chọn.")+'</td></tr>')+
       '</tbody></table></div>');
 }
 
@@ -558,6 +614,12 @@ async function handleSubmit(form) {
     if(form.id==="issue-form" || form.id==="quick-issue-form") {
       const code=field(data,"code");
       const amount=validMeters(field(data,"meters"));
+      if(form.id==="quick-issue-form") {
+        const selected=state.rolls.find(r=>r.roll_code===code);
+        if(!selected || selected.po.toLocaleLowerCase("vi-VN")!==state.issuePo.trim().toLocaleLowerCase("vi-VN") ||
+           selected.sap_items?.sap_code!==state.issueSap || selected.roll_code!==state.selectedIssue)
+          throw new Error("Đầu cây không khớp P/O và SAP đang chọn. Hãy chọn lại cây.");
+      }
       const {data:balance,error}=await state.client.rpc("kho_issue",{
         p_code:code,p_meters:amount,p_workshop:field(data,"workshop"),
         p_note:field(data,"note")
@@ -615,6 +677,13 @@ async function handleAction(button) {
           state.rolls.find(r=>r.id===m.roll_id)?.roll_code||"",Number(m.meters),
           m.workshop,m.from_location,m.to_location,m.actor_email,m.note]));
     }
+    if(act==="export-issue-ledger") {
+      if(!state.issuePo.trim() || !state.issueSap)throw new Error("Hãy chọn P/O và SAP trước khi tải bảng kê.");
+      await downloadXlsx("bang_ke_xuat_PU.xlsx",
+        ["Thời gian","P/O","Mã SAP","Mã đầu cây","Mét đầu cây","Số mét xuất","Dư sau xuất","Phân xưởng","Người xuất"],
+        issueLedger().map(m=>[time(m.created_at),m.roll.po,m.roll.sap_items?.sap_code,
+          m.roll.roll_code,Number(m.roll.initial_meters),Number(m.meters),Number(m.remainingAfter),m.workshop,m.actor_email]));
+    }
     if(act==="export-report") {
       await downloadXlsx("bao_cao_SAP_PO_PU.xlsx",
         ["Mã SAP","P/O","Số cây","Tổng nhập","Đã xuất","Còn dư"],
@@ -644,6 +713,17 @@ document.addEventListener("submit",event=>{
   handleSubmit(form);
 });
 document.addEventListener("input",event=>{
+  if(event.target.id==="issue-po") {
+    state.issuePo=event.target.value;
+    state.issueSap="";
+    state.selectedIssue=null;
+    state.issueSearch="";
+    const cursor=event.target.selectionStart;
+    renderCurrent();
+    const replacement=$("#issue-po");
+    replacement?.focus();
+    replacement?.setSelectionRange(cursor,cursor);
+  }
   if(event.target.id==="search-rolls") {
     state.find=event.target.value;
     const cursor=event.target.selectionStart;
@@ -662,6 +742,11 @@ document.addEventListener("input",event=>{
   }
 });
 document.addEventListener("change",event=>{
+  if(event.target.id==="issue-sap") {
+    state.issueSap=event.target.value;
+    state.selectedIssue=null;
+    renderCurrent();
+  }
   if(event.target.dataset.filter) {
     const prop={area:"filterArea",rack:"filterRack",bin:"filterBin"}[event.target.dataset.filter];
     state[prop]=event.target.value;
